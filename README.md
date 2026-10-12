@@ -15,22 +15,48 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# (선택) 테스트용 샘플 AASX 생성 → data/
-python scripts/create_sample_aasx.py
+# 설정 파일 생성 후 AASX_DATA_DIR 등 수정
+Copy-Item .env.example .env
 
-# 서버 실행 (기본: ./data 폴더, http://127.0.0.1:8000)
+# (선택) 테스트용 샘플 AASX 생성 → AASX_DATA_DIR
+python -m scripts.create_sample_aasx
+
+# 서버 실행 (호스트/포트 등은 .env 설정을 따름)
 python -m app
-python -m app --data-dir D:\aasx --host 0.0.0.0 --port 8000
-python -m app --reload   # 개발용 자동 재시작
 ```
 
 - 뷰어: http://127.0.0.1:8000/
 - API 문서(Swagger): http://127.0.0.1:8000/docs
 
-| 환경변수 | 설명 | 기본값 |
+## 설정 (.env)
+
+모든 설정은 레포 루트의 `.env` 에서 읽으며, 코드에서는 `config.py` 의 `settings` 만 참조합니다.
+OS 환경 변수가 이미 설정되어 있으면 `.env` 값보다 우선합니다. 상대 경로는 레포 루트 기준입니다.
+
+| 변수 | 설명 | 기본값 |
 | --- | --- | --- |
-| `AASX_DATA_DIR` | AASX 파일 폴더 (`--data-dir` 가 우선) | `data` |
-| `AASX_CORS_ORIGINS` | 허용할 Origin, 콤마 구분 | `*` |
+| `AASX_DATA_DIR` | AASX 파일 폴더 | **필수** |
+| `SERVER_HOST` | 바인딩 주소 | `127.0.0.1` |
+| `SERVER_PORT` | 포트 | `8000` |
+| `SERVER_RELOAD` | 코드 변경 시 자동 재시작 (개발용) | `false` |
+| `CORS_ORIGINS` | 허용할 Origin, 콤마 구분 | `*` |
+| `LOG_LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL` | `INFO` |
+| `LOG_DIR` | 로그 파일 폴더, 비우면 콘솔에만 출력 | (없음) |
+| `LOG_FILE_NAME` | 로그 파일 이름 | `app.log` |
+| `LOG_MAX_BYTES` | 로그 파일 회전 크기 | `10485760` |
+| `LOG_BACKUP_COUNT` | 보관할 이전 로그 파일 수 | `5` |
+
+## 로그
+
+로그 설정은 `utils/log_setup.py` 의 `LogSetup` 에서 정의합니다. 새 모듈에서는 다음과 같이 로거를 얻습니다.
+
+```python
+from utils.log_setup import LogSetup
+
+logger = LogSetup.get_logger(__name__)
+```
+
+uvicorn, BaSyx SDK 로그도 같은 형식으로 콘솔과 로그 파일에 함께 기록됩니다.
 
 폴더에 파일을 추가/교체한 뒤에는 뷰어의 "폴더 다시 읽기" 버튼 또는 `POST /api/packages/reload` 로 다시 로드합니다.
 
@@ -88,14 +114,17 @@ AAS Part 2 API와 동일하게 **base64url 인코딩**해서 전달합니다. �
 ## 구조
 
 ```
+config.py          .env / 환경 변수 → settings
+.env.example       .env 템플릿
+utils/
+  log_setup.py     공용 로그 설정 (LogSetup)
 app/
-  __main__.py      CLI 진입점 (python -m app)
+  __main__.py      서버 진입점 (python -m app)
   main.py          FastAPI 앱 생성, CORS, 정적 뷰어 마운트
   api.py           REST 엔드포인트
   repository.py    폴더 내 AASX 로드 (basyx AASXReader)
   serializers.py   간소화 트리 변환
-  config.py        환경변수 설정
   static/          HTML 트리 뷰어
 scripts/
-  create_sample_aasx.py  샘플 AASX 생성
+  create_sample_aasx.py  샘플 AASX 생성 (python -m scripts.create_sample_aasx)
 ```

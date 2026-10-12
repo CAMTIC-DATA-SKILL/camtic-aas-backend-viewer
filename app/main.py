@@ -1,27 +1,27 @@
-import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from config import Settings, settings
+from utils.log_setup import LogSetup
+
 from .api import router
-from .config import Settings, load_settings
 from .repository import AasxRepository
+
+logger = LogSetup.get_logger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def create_app(settings: Optional[Settings] = None) -> FastAPI:
-    settings = settings or load_settings()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s - %(message)s")
-    repository = AasxRepository(settings.data_dir)
+def create_app(app_settings: Settings = settings) -> FastAPI:
+    repository = AasxRepository(app_settings.aasx_data_dir)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        logging.getLogger(__name__).info("Loading AASX packages from %s", settings.data_dir)
+        logger.info("Loading AASX packages from %s", app_settings.aasx_data_dir)
         repository.reload()
         yield
 
@@ -33,7 +33,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.state.repository = repository
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=list(app_settings.cors_origins),
         allow_methods=["*"],
         allow_headers=["*"],
     )

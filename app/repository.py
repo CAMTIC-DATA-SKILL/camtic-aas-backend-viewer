@@ -1,5 +1,4 @@
 import io
-import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -10,7 +9,9 @@ import pyecma376_2
 from basyx.aas import model
 from basyx.aas.adapter import aasx
 
-logger = logging.getLogger(__name__)
+from utils.log_setup import LogSetup
+
+logger = LogSetup.get_logger(__name__)
 
 _CORE_PROPERTY_NAMES = (
     "title",
