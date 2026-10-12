@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CAMTIC AAS Viewer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>CAMTIC AAS Viewer</h1>
+    <div class="topbar-actions">
+      <button id="reload-btn" type="button">폴더 다시 읽기</button>
+      <a href="/docs" target="_blank" rel="noopener">API 문서</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="panel packages">
+      <h2>AASX 패키지</h2>
+      <ul id="package-list" class="package-list"></ul>
+    </aside>
+
+    <main class="panel tree-panel">
+      <section id="package-header" class="package-header"></section>
+      <div class="tree-toolbar">
+        <input id="search" type="search" placeholder="idShort, 값, semanticId 검색">
+        <button id="expand-btn" type="button">모두 펼치기</button>
+        <button id="collapse-btn" type="button">모두 접기</button>
+      </div>
+      <div id="tree" class="tree"></div>
+    </main>
+
+    <aside class="panel detail-panel">
+      <h2>상세 정보</h2>
+      <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
+    </aside>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
