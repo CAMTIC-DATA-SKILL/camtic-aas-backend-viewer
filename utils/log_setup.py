@@ -54,6 +54,8 @@ class LogSetup:
                 uvicorn_logger.propagate = True
             # SERVER_RELOAD 사용 시 파일 변경마다 INFO 로그를 남기므로 경고 이상만 기록한다.
             logging.getLogger("watchfiles").setLevel(logging.WARNING)
+            # asyncua 구독 publish 는 수신값 전체를 INFO 로 찍는다. 값은 우리 쪽에서 DEBUG 로 남긴다.
+            logging.getLogger("asyncua.common.subscription").setLevel(logging.WARNING)
 
             cls._configured = True
 

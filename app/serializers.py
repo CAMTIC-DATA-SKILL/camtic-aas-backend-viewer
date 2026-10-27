@@ -69,11 +69,14 @@ def _specific_asset_ids(ids: Iterable[model.SpecificAssetId]) -> list[dict[str, 
     return [{"name": s.name, "value": s.value} for s in ids]
 
 
-def package_summary(package: AasxPackage) -> dict[str, Any]:
-    return _compact(
+def package_summary(
+    package: AasxPackage, *, artifact_count: Optional[int] = None
+) -> dict[str, Any]:
+    summary = _compact(
         {
             "id": package.id,
             "fileName": package.path.name,
+            "fileSize": package.path.stat().st_size if package.path.is_file() else None,
             "loadedAt": package.loaded_at.isoformat(),
             "error": package.error,
             "coreProperties": package.core_properties,
@@ -85,11 +88,21 @@ def package_summary(package: AasxPackage) -> dict[str, Any]:
                 "files": len(package.files),
             },
             "shells": [
-                _compact({"id": s.id, "idBase64": encode_id(s.id), "idShort": s.id_short})
+                _compact(
+                    {
+                        "id": s.id,
+                        "idBase64": encode_id(s.id),
+                        "idShort": s.id_short,
+                        "globalAssetId": s.asset_information.global_asset_id,
+                    }
+                )
                 for s in package.shells
             ],
         }
     )
+    if artifact_count is not None:
+        summary["artifactCount"] = artifact_count
+    return summary
 
 
 class TreeBuilder:

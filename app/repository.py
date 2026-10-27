@@ -1,4 +1,6 @@
 import io
+import re
+import shutil
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -12,6 +14,8 @@ from basyx.aas.adapter import aasx
 from utils.log_setup import LogSetup
 
 logger = LogSetup.get_logger(__name__)
+
+_SAFE_FILENAME = re.compile(r"[^\w.\- ()\[\]]+", re.UNICODE)
 
 _CORE_PROPERTY_NAMES = (
     "title",
@@ -102,13 +106,18 @@ def load_package(path: Path, package_id: str) -> AasxPackage:
 class AasxRepository:
     """지정된 폴더의 모든 ``*.aasx`` 파일을 메모리에 로드하여 보관한다."""
 
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, artifacts_dir: Optional[Path] = None):
         self.data_dir = data_dir
+        self.artifacts_dir = artifacts_dir or (data_dir.parent / "artifacts")
         self._packages: dict[str, AasxPackage] = {}
         self._lock = threading.Lock()
 
+    def artifact_dir(self, package_id: str) -> Path:
+        return self.artifacts_dir / package_id
+
     def reload(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         paths = sorted(
             p for p in self.data_dir.iterdir() if p.is_file() and p.suffix.lower() == ".aasx"
         )
@@ -134,3 +143,72 @@ class AasxRepository:
     def get(self, package_id: str) -> Optional[AasxPackage]:
         with self._lock:
             return self._packages.get(package_id)
+
+    def find_by_shell_id(self, shell_id: str) -> Optional[AasxPackage]:
+        """AssetAdministrationShell.id 로 패키지를 찾는다."""
+        with self._lock:
+            for package in self._packages.values():
+                if package.error:
+                    continue
+                if any(shell.id == shell_id for shell in package.shells):
+                    return package
+            return None
+
+    def save_upload(self, filename: str, content: bytes) -> AasxPackage:
+        """AASX 바이트를 데이터 폴더에 저장하고 로드한다. 동일 파일명은 덮어쓴다."""
+        safe_name = _sanitize_aasx_filename(filename)
+        target = self.data_dir / safe_name
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        logger.info("Saved uploaded AASX to %s (%d bytes)", target, len(content))
+
+        package_id = target.stem
+        package = load_package(target, package_id)
+        with self._lock:
+            # 동일 stem 충돌 시 기존 id 재사용, 없으면 stem 그대로
+            existing_id = next(
+                (pid for pid, pkg in self._packages.items() if pkg.path.resolve() == target.resolve()),
+                None,
+            )
+            if existing_id is not None:
+                package.id = existing_id
+                self._packages[existing_id] = package
+            else:
+                # stem 이 다른 경로의 패키지 id 와 겹치면 접미사
+                candidate = package_id
+                suffix = 2
+                while candidate in self._packages and self._packages[candidate].path.resolve() != target.resolve():
+                    candidate = f"{package_id}-{suffix}"
+                    suffix += 1
+                package.id = candidate
+                self._packages[candidate] = package
+            return package
+
+    def delete(self, package_id: str) -> bool:
+        """패키지 AASX 파일과 OPC-UA 산출물 폴더를 삭제하고 메모리에서 제거한다."""
+        with self._lock:
+            package = self._packages.get(package_id)
+            if package is None:
+                return False
+            path = package.path
+            del self._packages[package_id]
+
+        if path.is_file():
+            path.unlink()
+            logger.info("Deleted AASX file %s", path)
+        artifact_dir = self.artifact_dir(package_id)
+        if artifact_dir.is_dir():
+            shutil.rmtree(artifact_dir)
+            logger.info("Deleted artifacts directory %s", artifact_dir)
+        return True
+
+
+def _sanitize_aasx_filename(filename: str) -> str:
+    name = Path(filename).name
+    if not name.lower().endswith(".aasx"):
+        raise ValueError("Only .aasx files are allowed")
+    stem = name[:-5]
+    cleaned = _SAFE_FILENAME.sub("_", stem).strip(" ._")
+    if not cleaned:
+        raise ValueError("Invalid AASX file name")
+    return f"{cleaned}.aasx"

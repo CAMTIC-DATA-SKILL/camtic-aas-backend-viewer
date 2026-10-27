@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CAMTIC AAS Viewer</title>
+  <link rel="stylesheet" href="style.css?v=6">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <a href="/" class="back-link">← 플랫폼</a>
+      <h1>CAMTIC AAS Viewer</h1>
+    </div>
+    <div class="topbar-actions">
+      <button id="reload-btn" type="button">폴더 다시 읽기</button>
+      <a href="/docs" target="_blank" rel="noopener">API 문서</a>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+    <aside class="panel packages">
+      <h2>AASX 패키지</h2>
+      <ul id="package-list" class="package-list"></ul>
+    </aside>
+
+    <main class="panel tree-panel">
+      <section id="package-header" class="package-header"></section>
+      <div class="tree-toolbar">
+        <input id="search" type="search" placeholder="idShort, 값, semanticId 검색">
+        <button id="expand-btn" type="button">모두 펼치기</button>
+        <button id="collapse-btn" type="button">모두 접기</button>
+        <button id="live-btn" type="button">현장 값 불러오기</button>
+        <button id="live-view-btn" type="button" class="btn-primary">실시간 그래프</button>
+        <span id="live-status" class="muted"></span>
+      </div>
+      <div id="tree" class="tree"></div>
+    </main>
+
+    <aside class="panel detail-panel" id="detail-panel">
+      <h2>상세 정보</h2>
+      <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
+    </aside>
+
+    <section class="panel live-dash" id="live-dash" hidden>
+      <div class="live-head">
+        <div class="live-title">
+          <h2>실시간 그래프</h2>
+          <span id="live-badge" class="status-badge">offline</span>
+          <span id="live-ts" class="muted"></span>
+        </div>
+        <div class="live-controls">
+          <select id="live-window">
+            <option value="60">최근 60초</option>
+            <option value="600">최근 10분</option>
+            <option value="1800">최근 30분</option>
+            <option value="3600">최근 1시간</option>
+          </select>
+          <button id="live-rec" type="button">
+            <span class="dot"></span>
+            <span id="live-rec-text">REC</span>
+          </button>
+        </div>
+      </div>
+      <pre id="live-json" class="live-json">waiting...</pre>
+      <div class="live-charts">
+        <div class="live-chart-panel">
+          <h3>Joint Position / Velocity <span class="muted">실선 Position · 점선 Velocity</span></h3>
+          <div class="ctrl" id="joint-sel"></div>
+          <div class="chart-box"><canvas id="chart-joint"></canvas></div>
+        </div>
+        <div class="live-chart-panel">
+          <h3>Cartesian Position / Orientation</h3>
+          <div class="ctrl" id="cart-sel"></div>
+          <div class="chart-box"><canvas id="chart-cart"></canvas></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <script src="live.js?v=6"></script>
+  <script src="app.js?v=6"></script>
+</body>
+</html>

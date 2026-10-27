@@ -25,7 +25,9 @@ const state = {
   packageId: null,
   tree: null,
   selectedRow: null,
+  selectedNode: null,
   filter: "",
+  liveTimer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -68,6 +70,10 @@ const apiBase = (packageId) => `/api/packages/${encodeURIComponent(packageId)}`;
 
 // ---------------------------------------------------------------- packages
 
+function requestedPackageId() {
+  return new URLSearchParams(window.location.search).get("package");
+}
+
 async function loadPackages(reload = false) {
   try {
     state.packages = reload
@@ -78,13 +84,18 @@ async function loadPackages(reload = false) {
     return;
   }
   renderPackageList();
-  const current = state.packages.find((p) => p.id === state.packageId) || state.packages[0];
+  const requested = requestedPackageId();
+  const current =
+    state.packages.find((p) => p.id === state.packageId) ||
+    state.packages.find((p) => p.id === requested) ||
+    state.packages[0];
   if (current) {
     await selectPackage(current.id);
   } else {
     state.packageId = null;
     $("package-header").replaceChildren(
-      el("p", { className: "muted" }, "data 폴더에 .aasx 파일이 없습니다. 파일을 넣고 '폴더 다시 읽기'를 누르세요."),
+      el("p", { className: "muted" }, "등록된 AASX 패키지가 없습니다. 플랫폼에서 업로드하세요."),
+      el("p", {}, el("a", { href: "/" }, "← 플랫폼으로 이동")),
     );
     $("tree").replaceChildren();
   }
@@ -110,8 +121,13 @@ function renderPackageList() {
 }
 
 async function selectPackage(packageId) {
+  stopLiveRefresh();
   state.packageId = packageId;
   state.selectedRow = null;
+  state.selectedNode = null;
+  const url = new URL(window.location.href);
+  url.searchParams.set("package", packageId);
+  window.history.replaceState({}, "", url);
   renderPackageList();
   $("detail").replaceChildren(el("p", { className: "muted" }, "트리에서 항목을 선택하세요."));
 
@@ -132,6 +148,9 @@ async function selectPackage(packageId) {
   }
   renderPackageHeader(state.tree.package);
   renderTree();
+  if (window.LiveDashboard) LiveDashboard.resetHistory();
+  await tryLoadLiveValues({ silent: true });
+  startLiveRefresh();
 }
 
 function renderPackageHeader(pkg) {
@@ -170,7 +189,14 @@ function labelOf(node) {
   return index ? index[0] : node.id || node.path || "(이름 없음)";
 }
 
+function hasLiveValue(node) {
+  return Object.prototype.hasOwnProperty.call(node, "liveValue");
+}
+
 function valuePreview(node) {
+  if (hasLiveValue(node)) {
+    return node.liveValue == null ? "" : String(node.liveValue);
+  }
   switch (node.modelType) {
     case "Property":
     case "File":
@@ -214,7 +240,7 @@ function renderNode(node, depth, query) {
   if (query && !childNodes.length && !matchesFilter(node, query)) return null;
 
   const hasChildren = childrenOf(node).length > 0;
-  const collapsed = !query && depth >= 2;
+  const collapsed = !query && depth >= 2 && !node.hasLive;
   const li = el("li", { className: hasChildren && collapsed ? "collapsed" : "" });
 
   const caret = el("span", {
@@ -227,14 +253,21 @@ function renderNode(node, depth, query) {
   const displayName = pickLang(node.displayName);
   const row = el(
     "div",
-    { className: "row", onclick: () => selectNode(node, row) },
+    {
+      className: "row",
+      onclick: () => selectNode(node, row),
+    },
     caret,
     el("span", { className: `badge ${node.modelType}`, title: node.modelType }, BADGES[node.modelType] || node.modelType),
     el("span", { className: "label" }, labelOf(node)),
     displayName && displayName !== node.idShort ? el("span", { className: "muted" }, `(${displayName})`) : null,
     node.missing ? el("span", { className: "missing" }, "패키지에 없음") : null,
-    el("span", { className: "value" }, valuePreview(node)),
+    hasLiveValue(node)
+      ? el("span", { className: "badge live", title: node.liveNodeId || "OPC-UA" }, "LIVE")
+      : null,
+    el("span", { className: hasLiveValue(node) ? "value live" : "value" }, valuePreview(node)),
   );
+  if (node.chartKey) row.dataset.liveKey = node.chartKey;
   li.append(row);
   if (childNodes.length) li.append(el("ul", {}, childNodes));
   return li;
@@ -279,6 +312,7 @@ function selectNode(node, row) {
   state.selectedRow?.classList.remove("selected");
   row.classList.add("selected");
   state.selectedRow = row;
+  state.selectedNode = node;
   renderDetail(node);
 }
 
@@ -303,9 +337,18 @@ function renderDetail(node) {
     ["valueType", node.valueType],
   ];
 
-  if (node.modelType === "MultiLanguageProperty") rows.push(...langRows("value", node.value));
-  else if (node.modelType === "Range") rows.push(["min", node.min], ["max", node.max]);
-  else if (node.modelType !== "AssetAdministrationShell" && node.modelType !== "Submodel") {
+  if (hasLiveValue(node)) {
+    rows.push(
+      ["liveValue", node.liveValue == null ? "null" : String(node.liveValue)],
+      ["liveStatus", node.liveStatus],
+      ["liveNodeId", node.liveNodeId],
+      ["templateValue", node.value],
+    );
+  } else if (node.modelType === "MultiLanguageProperty") {
+    rows.push(...langRows("value", node.value));
+  } else if (node.modelType === "Range") {
+    rows.push(["min", node.min], ["max", node.max]);
+  } else if (node.modelType !== "AssetAdministrationShell" && node.modelType !== "Submodel") {
     rows.push(["value", node.value]);
   }
 
@@ -382,9 +425,146 @@ function renderDetail(node) {
 
 // -------------------------------------------------------------------- init
 
+function applyLiveValues(values) {
+  const byKey = new Map();
+  for (const item of values || []) {
+    if (item.submodelIdShort && item.path) {
+      byKey.set(`${item.submodelIdShort}\n${item.path}`, item);
+    }
+  }
+
+  const walk = (node, submodelIdShort) => {
+    const sm = node.modelType === "Submodel" ? node.idShort : submodelIdShort;
+    delete node.liveValue;
+    delete node.liveStatus;
+    delete node.liveNodeId;
+    delete node.hasLive;
+    const live = byKey.get(`${sm}\n${node.path || ""}`);
+    if (live) {
+      node.liveValue = live.value;
+      node.liveStatus = live.status;
+      node.liveNodeId = live.nodeId || null;
+      node.chartKey = `${sm}/${node.path}`;
+      node.hasLive = true;
+    } else {
+      delete node.chartKey;
+    }
+    let childLive = false;
+    for (const child of childrenOf(node)) {
+      if (walk(child, sm)) childLive = true;
+    }
+    if (childLive) node.hasLive = true;
+    return Boolean(node.hasLive);
+  };
+
+  for (const shell of state.tree?.shells || []) {
+    for (const submodel of shell.submodels || []) walk(submodel, submodel.idShort);
+  }
+}
+
+function setLiveStatus(message, isError = false) {
+  const node = $("live-status");
+  if (!node) return;
+  node.textContent = message || "";
+  node.className = isError ? "error-text" : "muted";
+}
+
+function stopLiveRefresh() {
+  if (state.liveTimer) {
+    clearTimeout(state.liveTimer);
+    state.liveTimer = null;
+  }
+}
+
+function applyLiveFrame(result) {
+  applyLiveValues(result.values);
+  if (document.querySelector("#tree .row[data-live-key]")) updateLiveRowTexts();
+  else renderTree();
+  if (state.selectedNode) renderDetail(state.selectedNode);
+  if (result.frame) window.LiveDashboard?.ingest?.(result.frame);
+  const good = (result.values || []).filter((item) => item.usable || item.isGood).length;
+  setLiveStatus(`AAS 현장 값 ${good}/${result.values?.length || 0}개`);
+}
+
+async function pullLiveFrame() {
+  return fetchJson(`/api/opcua/packages/${encodeURIComponent(state.packageId)}/live`);
+}
+
+function startLiveRefresh() {
+  stopLiveRefresh();
+  const tick = async () => {
+    if (!state.packageId || !state.tree) return;
+    try {
+      applyLiveFrame(await pullLiveFrame());
+    } catch (e) {
+      setLiveStatus(e.message, true);
+    }
+    state.liveTimer = setTimeout(tick, 500);
+  };
+  tick();
+}
+
+async function tryLoadLiveValues({ silent = false } = {}) {
+  if (!state.packageId || !state.tree) return;
+  if (!silent) setLiveStatus("현장 값을 읽는 중...");
+  try {
+    const status = await fetchJson("/api/opcua/status");
+    if (!status.connected) {
+      stopLiveRefresh();
+      setLiveStatus(silent ? "" : "OPC-UA에 먼저 접속하세요. 유틸리티 → OPC-UA", !silent);
+      return;
+    }
+    applyLiveFrame(await pullLiveFrame());
+    startLiveRefresh();
+  } catch (e) {
+    if (!silent) setLiveStatus(e.message, true);
+  }
+}
+
+function updateLiveRowTexts() {
+  document.querySelectorAll("#tree .row[data-live-key]").forEach((row) => {
+    const key = row.dataset.liveKey;
+    const node = findNodeByChartKey(key);
+    const valueEl = row.querySelector(".value");
+    if (node && valueEl) valueEl.textContent = node.liveValue == null ? "" : String(node.liveValue);
+  });
+}
+
+function findNodeByChartKey(key) {
+  let found = null;
+  const walk = (node, submodelIdShort) => {
+    const sm = node.modelType === "Submodel" ? node.idShort : submodelIdShort;
+    if (`${sm}/${node.path || ""}` === key) found = node;
+    childrenOf(node).forEach((child) => walk(child, sm));
+  };
+  for (const shell of state.tree?.shells || []) {
+    for (const submodel of shell.submodels || []) walk(submodel, submodel.idShort);
+  }
+  return found;
+}
+
+function setLiveView(on) {
+  const dash = window.LiveDashboard;
+  if (!dash) {
+    setLiveStatus("그래프 스크립트를 불러오지 못했습니다. 새로고침하세요.", true);
+    return;
+  }
+  if (on) dash.show();
+  else dash.hide();
+  $("live-view-btn").textContent = on ? "그래프 닫기" : "실시간 그래프";
+}
+
+if (window.LiveDashboard) {
+  LiveDashboard.init({
+    getPackageId: () => state.packageId,
+  });
+}
+
 $("reload-btn").addEventListener("click", () => loadPackages(true));
 $("expand-btn").addEventListener("click", () => setAllCollapsed(false));
 $("collapse-btn").addEventListener("click", () => setAllCollapsed(true));
+$("live-btn").addEventListener("click", () => tryLoadLiveValues());
+$("live-view-btn").addEventListener("click", () => setLiveView(!window.LiveDashboard?.isVisible()));
 
 let searchTimer;
 $("search").addEventListener("input", (e) => {

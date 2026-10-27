@@ -3,40 +3,146 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CAMTIC AAS Viewer</title>
+  <title>CAMTIC AAS Data Platform</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="platform">
   <header class="topbar">
-    <h1>CAMTIC AAS Viewer</h1>
-    <div class="topbar-actions">
-      <button id="reload-btn" type="button">폴더 다시 읽기</button>
-      <a href="/docs" target="_blank" rel="noopener">API 문서</a>
+    <div class="brand">
+      <h1>CAMTIC AAS Data Platform</h1>
+      <span class="brand-sub">AASX 패키지 조회 · 업로드 · OPC-UA 산출물</span>
+    </div>
+    <div class="topbar-actions" id="home-actions">
+      <button id="reload-btn" type="button">목록 새로고침</button>
     </div>
   </header>
 
-  <div class="layout">
-    <aside class="panel packages">
-      <h2>AASX 패키지</h2>
-      <ul id="package-list" class="package-list"></ul>
-    </aside>
-
-    <main class="panel tree-panel">
-      <section id="package-header" class="package-header"></section>
-      <div class="tree-toolbar">
-        <input id="search" type="search" placeholder="idShort, 값, semanticId 검색">
-        <button id="expand-btn" type="button">모두 펼치기</button>
-        <button id="collapse-btn" type="button">모두 접기</button>
+  <div class="app-shell">
+    <nav class="app-nav" aria-label="플랫폼 메뉴">
+      <a class="nav-item" id="nav-home" href="#home">홈</a>
+      <div class="nav-group" id="nav-utility-group">
+        <a class="nav-item" id="nav-utility" href="#utility/opcua">유틸리티</a>
+        <div class="nav-sub">
+          <a class="nav-item nav-subitem" id="nav-utility-opcua" href="#utility/opcua">OPC-UA</a>
+        </div>
       </div>
-      <div id="tree" class="tree"></div>
-    </main>
+      <a class="nav-item" id="nav-api" href="#api">API 문서</a>
+    </nav>
 
-    <aside class="panel detail-panel">
-      <h2>상세 정보</h2>
-      <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
-    </aside>
+    <div class="app-content">
+      <main class="app-view" id="view-home" hidden>
+        <section class="toolbar panel">
+          <div class="toolbar-left">
+            <h2>AASX 패키지 목록</h2>
+            <p class="muted" id="package-count">불러오는 중...</p>
+          </div>
+          <div class="toolbar-right">
+            <button id="upload-btn" type="button" class="btn-primary">AAS 데이터 업로드</button>
+            <button id="download-aasx-btn" type="button" class="btn-secondary" disabled>AAS 데이터 다운로드</button>
+            <button id="download-artifacts-btn" type="button" class="btn-secondary" disabled>OPC-UA 산출물 다운로드</button>
+            <button id="delete-btn" type="button" class="btn-danger" disabled>삭제</button>
+          </div>
+        </section>
+
+        <section class="panel table-panel">
+          <table class="package-table" id="package-table">
+            <thead>
+              <tr>
+                <th class="col-check"></th>
+                <th>파일명</th>
+                <th>AAS id</th>
+                <th>AAS</th>
+                <th>Submodel</th>
+                <th>Concept</th>
+                <th>산출물</th>
+                <th>상태</th>
+                <th>로드 시각</th>
+              </tr>
+            </thead>
+            <tbody id="package-tbody">
+              <tr><td colspan="9" class="muted">불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+
+      <main class="app-view" id="view-utility" hidden>
+        <section class="panel opcua-panel">
+          <div class="opcua-head">
+            <div>
+              <h2>OPC-UA 클라이언트</h2>
+              <p class="muted" id="opcua-status-text">연결 상태를 확인하는 중...</p>
+            </div>
+            <span id="opcua-badge" class="status-badge">확인 중</span>
+          </div>
+          <div class="opcua-form">
+            <label>
+              서버
+              <select id="opcua-server">
+                <option value="">직접 입력</option>
+              </select>
+            </label>
+            <label>
+              엔드포인트
+              <input id="opcua-endpoint" type="text" spellcheck="false" placeholder="opc.tcp://127.0.0.1:4840">
+            </label>
+            <label>
+              사용자
+              <input id="opcua-username" type="text" autocomplete="username" placeholder="비우면 Anonymous">
+            </label>
+            <label>
+              비밀번호
+              <input id="opcua-password" type="password" autocomplete="current-password">
+            </label>
+            <div class="opcua-actions">
+              <button id="opcua-connect-btn" type="button" class="btn-primary">접속</button>
+              <button id="opcua-disconnect-btn" type="button" disabled>연결 종료</button>
+              <button id="opcua-read-package-btn" type="button" class="btn-secondary" disabled>선택 패키지 AAS 매핑 읽기</button>
+            </div>
+          </div>
+          <p id="opcua-message" class="upload-status" hidden></p>
+          <div class="opcua-body">
+            <div class="opcua-tree-wrap">
+              <h3>주소 공간</h3>
+              <div id="opcua-tree" class="tree opcua-tree"><p class="muted">서버에 접속하면 Objects 하위 노드가 표시됩니다.</p></div>
+            </div>
+            <div class="opcua-detail-wrap">
+              <h3>노드</h3>
+              <div id="opcua-detail" class="detail"><p class="muted">트리에서 노드를 선택하세요.</p></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <main class="app-view view-api" id="view-api" hidden>
+        <div class="api-toolbar">
+          <p class="muted">Swagger UI</p>
+          <a href="/docs" target="_blank" rel="noopener">새 창에서 열기</a>
+        </div>
+        <iframe id="api-docs-frame" class="api-frame" title="API 문서"></iframe>
+      </main>
+    </div>
   </div>
 
-  <script src="app.js"></script>
+  <dialog id="upload-dialog" class="upload-dialog">
+    <form method="dialog" id="upload-form">
+      <header>
+        <h2>AASX 데이터 업로드</h2>
+        <button type="submit" value="cancel" class="icon-btn" aria-label="닫기">×</button>
+      </header>
+      <p class="muted">AAS 표준 패키지(`.aasx`)만 업로드할 수 있습니다. 업로드 후 OPC-UA용 <code>nodeset.xml</code>, <code>engineering.csv</code>, <code>syscfg.json</code> 이 자동 생성됩니다.</p>
+      <label class="dropzone" id="dropzone" for="file-input">
+        <input id="file-input" type="file" accept=".aasx,application/asset-administration-shell-package" hidden>
+        <span id="dropzone-label">여기에 AASX 파일을 놓거나 클릭하여 선택</span>
+      </label>
+      <p id="upload-status" class="upload-status" hidden></p>
+      <footer>
+        <button type="submit" value="cancel">취소</button>
+        <button id="upload-submit" type="button" class="btn-primary" disabled>업로드</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="platform.js"></script>
 </body>
 </html>

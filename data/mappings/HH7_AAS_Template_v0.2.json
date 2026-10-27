@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "1.0.0",
+  "packageId": "HH7_AAS_Template_v0.2",
+  "aasId": "urn:physical-ai:aas:hyundai:hh7:template:v0.2",
+  "bindings": [
+    {
+      "id": "j1-pos",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointPosition.J1",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint1Position",
+      "nodeId": "ns=2;i=1145",
+      "sourceLabel": "axis angle J1"
+    },
+    {
+      "id": "j2-pos",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointPosition.J2",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint2Position",
+      "nodeId": "ns=2;i=1146",
+      "sourceLabel": "axis angle J2"
+    },
+    {
+      "id": "j3-pos",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointPosition.J3",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint3Position",
+      "nodeId": "ns=2;i=1147",
+      "sourceLabel": "axis angle J3"
+    },
+    {
+      "id": "j4-pos",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointPosition.J4",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint4Position",
+      "nodeId": "ns=2;i=1148",
+      "sourceLabel": "axis angle J4"
+    },
+    {
+      "id": "j5-pos",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointPosition.J5",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint5Position",
+      "nodeId": "ns=2;i=1149",
+      "sourceLabel": "axis angle J5"
+    },
+    {
+      "id": "j6-pos",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointPosition.J6",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint6Position",
+      "nodeId": "ns=2;i=1150",
+      "sourceLabel": "axis angle J6"
+    },
+    {
+      "id": "tcp-x",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "TCPPosition.X",
+      "semanticId": "urn:physical-ai:hh7:concept:TCPPositionX",
+      "nodeId": "ns=2;i=1152",
+      "sourceLabel": "user_pos X"
+    },
+    {
+      "id": "tcp-y",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "TCPPosition.Y",
+      "semanticId": "urn:physical-ai:hh7:concept:TCPPositionY",
+      "nodeId": "ns=2;i=1153",
+      "sourceLabel": "user_pos Y"
+    },
+    {
+      "id": "tcp-z",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "TCPPosition.Z",
+      "semanticId": "urn:physical-ai:hh7:concept:TCPPositionZ",
+      "nodeId": "ns=2;i=1154",
+      "sourceLabel": "user_pos Z"
+    },
+    {
+      "id": "tcp-ori-1",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "TCPOrientation.Component1",
+      "semanticId": "urn:physical-ai:hh7:concept:TCPOrientationComponent1",
+      "nodeId": "ns=2;i=1156",
+      "sourceLabel": "user_pos Rx"
+    },
+    {
+      "id": "tcp-ori-2",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "TCPOrientation.Component2",
+      "semanticId": "urn:physical-ai:hh7:concept:TCPOrientationComponent2",
+      "nodeId": "ns=2;i=1157",
+      "sourceLabel": "user_pos Ry"
+    },
+    {
+      "id": "tcp-ori-3",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "TCPOrientation.Component3",
+      "semanticId": "urn:physical-ai:hh7:concept:TCPOrientationComponent3",
+      "nodeId": "ns=2;i=1158",
+      "sourceLabel": "user_pos Rz"
+    },
+    {
+      "id": "j1-vel",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointSpeed.J1",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint1Speed",
+      "nodeId": "ns=2;s=robot.robot-1.jv1.value_0",
+      "sourceLabel": "jv1 J1"
+    },
+    {
+      "id": "j2-vel",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointSpeed.J2",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint2Speed",
+      "nodeId": "ns=2;s=robot.robot-1.jv1.value_1",
+      "sourceLabel": "jv1 J2"
+    },
+    {
+      "id": "j3-vel",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointSpeed.J3",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint3Speed",
+      "nodeId": "ns=2;s=robot.robot-1.jv1.value_2",
+      "sourceLabel": "jv1 J3"
+    },
+    {
+      "id": "j4-vel",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointSpeed.J4",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint4Speed",
+      "nodeId": "ns=2;s=robot.robot-1.jv2.value_0",
+      "sourceLabel": "jv2 J4"
+    },
+    {
+      "id": "j5-vel",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointSpeed.J5",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint5Speed",
+      "nodeId": "ns=2;s=robot.robot-1.jv2.value_1",
+      "sourceLabel": "jv2 J5"
+    },
+    {
+      "id": "j6-vel",
+      "submodelIdShort": "RobotKinematicState",
+      "path": "JointSpeed.J6",
+      "semanticId": "urn:physical-ai:hh7:concept:Joint6Speed",
+      "nodeId": "ns=2;s=robot.robot-1.jv2.value_2",
+      "sourceLabel": "jv2 J6"
+    }
+  ]
+}

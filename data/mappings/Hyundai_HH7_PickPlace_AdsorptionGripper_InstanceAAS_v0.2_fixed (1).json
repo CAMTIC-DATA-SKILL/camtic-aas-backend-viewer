@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "packageId": "Hyundai_HH7_PickPlace_AdsorptionGripper_InstanceAAS_v0.2_fixed (1)",
+  "aasId": "urn:example:aas:hyundai:hh7:pickplace:01",
+  "bindings": [
+    {
+      "id": "power",
+      "submodelIdShort": "OperationalData",
+      "path": "ActualDataMonitoring.EquipmentState.PowerYesno",
+      "semanticId": "Https://www.smart-factory.kr/ids/cd/PowerYesno/1/0",
+      "nodeId": "ns=2;s=robot.robot-1.S0004",
+      "sourceLabel": "PLC RUN Status",
+      "transform": "as_bool"
+    },
+    {
+      "id": "operation-type",
+      "submodelIdShort": "OperationalData",
+      "path": "ActualDataMonitoring.EquipmentState.OperationType",
+      "semanticId": "Https://www.smart-factory.kr/ids/cd/OperationType/1/0",
+      "nodeId": "ns=2;s=robot.robot-1.S0041",
+      "sourceLabel": "robot status (0: stop, 1: run, 2: wait)",
+      "transform": "robot_status"
+    },
+    {
+      "id": "timestamp",
+      "submodelIdShort": "OperationalData",
+      "path": "Timestamp",
+      "semanticId": "https://www.smart-factory.kr/ids/cd/Timestamp/1/0",
+      "transform": "compose_datetime",
+      "sources": [
+        {
+          "role": "year",
+          "nodeId": "ns=2;s=robot.robot-1.S0006",
+          "sourceLabel": "current_year"
+        },
+        {
+          "role": "month",
+          "nodeId": "ns=2;s=robot.robot-1.S0008",
+          "sourceLabel": "current_month"
+        },
+        {
+          "role": "day",
+          "nodeId": "ns=2;s=robot.robot-1.S0009",
+          "sourceLabel": "current_day"
+        },
+        {
+          "role": "hour",
+          "nodeId": "ns=2;s=robot.robot-1.S0010",
+          "sourceLabel": "current_hour"
+        },
+        {
+          "role": "minute",
+          "nodeId": "ns=2;s=robot.robot-1.S0011",
+          "sourceLabel": "current_minute"
+        },
+        {
+          "role": "second",
+          "nodeId": "ns=2;s=robot.robot-1.S0012",
+          "sourceLabel": "current_seconds"
+        }
+      ]
+    }
+  ]
+}

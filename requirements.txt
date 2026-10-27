@@ -2,3 +2,5 @@ basyx-python-sdk>=2.2,<3
 fastapi>=0.115
 uvicorn[standard]>=0.30
 python-dotenv>=1.0
+python-multipart>=0.0.9
+asyncua>=2.0,<3
