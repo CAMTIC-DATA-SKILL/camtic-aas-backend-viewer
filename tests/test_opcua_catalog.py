@@ -44,6 +44,7 @@ def test_load_catalog_and_local_override(tmp_path: Path):
                         "name": "Lab",
                         "endpoint": "opc.tcp://192.168.1.10:4840",
                         "aasId": "urn:example:aas:lab",
+                        "nodeIdNamespace": 2,
                     },
                     {
                         "id": "field",
@@ -79,6 +80,8 @@ def test_load_catalog_and_local_override(tmp_path: Path):
     assert field.endpoint == "opc.tcp://10.0.0.9:4840"
     assert field.aas_id == "urn:example:aas:hyundai:hh7:pickplace:01"
     assert catalog.get("lab").aas_id == "urn:example:aas:lab"
+    assert catalog.get("lab").node_id_namespace == 2
+    assert catalog.get("field").node_id_namespace is None
     assert catalog.default_server_id == "field"
     assert "catalog.json" in catalog.source
     assert "catalog.local.json" in catalog.source

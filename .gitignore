@@ -225,8 +225,5 @@ logs/
 # Generated OPC-UA artifacts (uploaded AASX remain under data/aasx)
 data/artifacts/
 
-# Live REC CSV
-data/records/
-
 # Local OPC-UA server catalog (endpoints / site overrides)
 data/opcua/catalog.local.json

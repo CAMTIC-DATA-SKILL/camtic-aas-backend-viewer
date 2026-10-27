@@ -237,7 +237,8 @@ class OpcUaClient:
         for node_id, result in zip(ids, results):
             if isinstance(result, ua.StatusCode):
                 failed += 1
-                logger.error("노드 구독 실패: %s (%s)", node_id, result.name)
+                log = logger.warning if result.name == "BadNodeIdUnknown" else logger.error
+                log("노드 구독 실패: %s (%s)", node_id, result.name)
 
         self._subscriptions.append(subscription)
         logger.info(

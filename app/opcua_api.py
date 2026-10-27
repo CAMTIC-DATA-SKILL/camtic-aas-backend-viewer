@@ -11,7 +11,14 @@ from .live_frame import frame_from_mapping
 from .opc_ua import OpcUaClientError, OpcUaSession
 from .opcua_catalog import CatalogServer, load_catalog
 from .opcua_export import load_engineering_nodes
-from .opcua_mapping import AasOpcUaMapping, apply_engineering, apply_mapping, load_mapping
+from .opcua_mapping import (
+    AasOpcUaMapping,
+    apply_engineering,
+    apply_mapping,
+    load_mapping,
+    rewrite_node_id,
+    split_engineering_path,
+)
 from .repository import AasxPackage, AasxRepository
 
 logger = LogSetup.get_logger(__name__)
@@ -87,8 +94,15 @@ def engineering_live_response(
     session: OpcUaSession,
     package_id: str,
     aas_id: str = "",
+    field_namespace: Optional[int] = None,
 ) -> dict[str, Any]:
-    mapped = apply_engineering(nodes, session.latest_values(), package_id=package_id)
+    mapped = apply_engineering(
+        nodes,
+        session.latest_values(),
+        package_id=package_id,
+        field_namespace=field_namespace,
+    )
+    mapped = [item for item in mapped if item.get("usable") or item.get("isGood")]
     return {
         "packageId": package_id,
         "source": "engineering",
@@ -116,18 +130,42 @@ def _require_mapping(package: AasxPackage, repository: AasxRepository) -> AasOpc
     return mapping
 
 
+_LIVE_SUBMODELS = {"RobotKinematicState", "RobotOperationalState"}
+
+
+def _field_namespace(session: OpcUaSession) -> Optional[int]:
+    server_id = session.catalog_server_id
+    if not server_id:
+        return None
+    server = load_catalog().get(server_id)
+    return server.node_id_namespace if server else None
+
+
+def _engineering_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for node in nodes:
+        submodel, _path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
+        if submodel in _LIVE_SUBMODELS:
+            selected.append(node)
+    return selected or nodes
+
+
 def _package_live_source(
-    package: AasxPackage, repository: AasxRepository
-) -> tuple[str, Optional[AasOpcUaMapping], list[dict[str, Any]], list[str], str]:
-    mapping = load_mapping(package.id, repository.artifact_dir(package.id))
-    aas_id = mapping.aas_id if mapping else ""
-    if not aas_id and package.shells:
-        aas_id = str(package.shells[0].id)
-    if mapping is not None:
-        return "mapping", mapping, [], mapping.required_node_ids(), aas_id
-    nodes = load_engineering_nodes(repository.artifact_dir(package.id), variables_only=True)
-    node_ids = [str(node["nodeId"]) for node in nodes if node.get("nodeId")]
-    return "engineering", None, nodes, node_ids, aas_id
+    package: AasxPackage,
+    repository: AasxRepository,
+    field_namespace: Optional[int] = None,
+) -> tuple[str, list[dict[str, Any]], list[str], str]:
+    aas_id = str(package.shells[0].id) if package.shells else ""
+    nodes = _engineering_live_nodes(
+        load_engineering_nodes(repository.artifact_dir(package.id), variables_only=True),
+        package.id,
+    )
+    node_ids = [
+        rewrite_node_id(str(node["nodeId"]), field_namespace)
+        for node in nodes
+        if node.get("nodeId")
+    ]
+    return "engineering", nodes, node_ids, aas_id
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -253,7 +291,9 @@ async def subscribe_engineering(
     if package is None:
         logger.info("OPC-UA 토픽 등록 생략: aasId/packageId 가 없습니다.")
         return None
-    source, _mapping, nodes, node_ids, _aas_id = _package_live_source(package, repository)
+    source, nodes, node_ids, _aas_id = _package_live_source(
+        package, repository, field_namespace=_field_namespace(session)
+    )
     if not node_ids:
         if source == "engineering" and not nodes:
             return f"engineering.csv 변수 노드가 없습니다: {package.id}"
@@ -392,20 +432,27 @@ async def opcua_package_live(
     repository: AasxRepository = Depends(get_repository),
     session: OpcUaSession = Depends(get_opcua),
 ) -> dict[str, Any]:
-    _source, mapping, nodes, node_ids, aas_id = _package_live_source(package, repository)
+    field_namespace = _field_namespace(session)
+    _source, nodes, node_ids, aas_id = _package_live_source(
+        package, repository, field_namespace=field_namespace
+    )
     if not node_ids:
         raise HTTPException(
             status_code=404,
-            detail="AAS↔OPC-UA 매핑 또는 engineering.csv 변수 노드가 없습니다.",
+            detail="engineering.csv 변수 노드가 없습니다.",
         )
     if session.is_connected:
         try:
             await session.ensure_subscribed(node_ids, package_id=package.id)
         except Exception as exc:
             raise _http_error(exc) from exc
-    if mapping is not None:
-        return mapping_live_response(mapping, session, package.id)
-    return engineering_live_response(nodes, session, package.id, aas_id=aas_id)
+    return engineering_live_response(
+        nodes,
+        session,
+        package.id,
+        aas_id=aas_id,
+        field_namespace=field_namespace,
+    )
 
 
 @router.post("/packages/{package_id}/read")
@@ -413,9 +460,11 @@ async def opcua_package_read(
     package: AasxPackage = Depends(get_package),
     repository: AasxRepository = Depends(get_repository),
     session: OpcUaSession = Depends(get_opcua),
-    source: str = "mapping",
+    source: str = "auto",
 ) -> dict[str, Any]:
     artifact_dir = repository.artifact_dir(package.id)
+    if source == "auto":
+        source = "mapping" if load_mapping(package.id, artifact_dir) else "engineering"
     if source == "engineering":
         return await _read_engineering_nodes(package, artifact_dir, session)
     if source != "mapping":
@@ -451,8 +500,10 @@ async def _read_engineering_nodes(
             status_code=404,
             detail="engineering.csv 변수 노드가 없습니다. 산출물을 먼저 생성하세요.",
         )
+    field_namespace = _field_namespace(session)
+    field_ids = [rewrite_node_id(node["nodeId"], field_namespace) for node in nodes]
     try:
-        values = await session.read([node["nodeId"] for node in nodes])
+        values = await session.read(field_ids)
     except Exception as exc:
         raise _http_error(exc) from exc
     by_id = {item["nodeId"]: item for item in values}
@@ -462,7 +513,8 @@ async def _read_engineering_nodes(
         "values": [
             {
                 **node,
-                **by_id.get(node["nodeId"], {}),
+                **by_id.get(rewrite_node_id(node["nodeId"], field_namespace), {}),
+                "nodeId": rewrite_node_id(node["nodeId"], field_namespace),
             }
             for node in nodes
         ],

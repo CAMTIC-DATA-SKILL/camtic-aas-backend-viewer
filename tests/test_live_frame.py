@@ -1,12 +1,6 @@
-import pytest
-
 from app.live_frame import (
-    collector_data_url,
-    flatten_frame,
-    frame_from_collector,
     frame_from_mapping,
     series_key,
-    validate_collector_url,
 )
 
 
@@ -69,9 +63,6 @@ def test_frame_from_mapping_uses_aas_paths():
     assert by_id[power_key]["label"] == "PowerYesno"
     assert by_id[power_key]["group"] == "OperationalData · ActualDataMonitoring · EquipmentState"
     assert "OperationalData/Timestamp" not in by_id
-    row = flatten_frame(frame)
-    assert row[power_key] == 3.0
-    assert row["AasId"] == "urn:example:aas:hyundai:hh7:pickplace:01"
 
 
 def test_frame_from_hh7_template_paths():
@@ -113,23 +104,3 @@ def test_frame_from_hh7_template_paths():
     assert frame["joint"]["J1"] == {"Position": -82.4, "Velocity": 30.1}
     assert frame["cartesian"]["X"] == 82.7
     assert frame["cartesian"]["Rx"] == -179.9
-
-
-def test_flatten_and_collector_url():
-    frame = frame_from_collector(
-        {
-            "Meta": {"Timestamp": "t", "Seq": 1, "Model": "M", "Online": 1},
-            "Status": {"Playback": 1},
-            "Joint": {"J1": {"Position": 1, "Velocity": 2}},
-            "Cartesian": {},
-            "Errors": {"LastError": ""},
-        }
-    )
-    row = flatten_frame(frame)
-    assert row["Timestamp"] == "t"
-    assert row["Joint/J1.Position"] == 1
-    assert validate_collector_url("http://127.0.0.1:4100") == "http://127.0.0.1:4100"
-    assert collector_data_url("http://127.0.0.1:4100") == "http://127.0.0.1:4100/api/data"
-    assert collector_data_url("http://127.0.0.1:4100/api/data") == "http://127.0.0.1:4100/api/data"
-    with pytest.raises(ValueError):
-        validate_collector_url("file:///tmp/x")

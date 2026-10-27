@@ -531,27 +531,6 @@ li:not(.collapsed) > .row .caret::before { content: "▾"; }
 }
 .chart-box { height: 220px; position: relative; }
 
-#live-rec {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #fff;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  border-radius: 16px;
-  padding: 4px 12px;
-}
-#live-rec:hover { border-color: #ef4444; }
-#live-rec .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #9ca3af;
-}
-#live-rec.on { background: #fef2f2; border-color: #ef4444; color: #b91c1c; }
-#live-rec.on .dot { background: #ef4444; animation: rec-blink 1s infinite; }
-@keyframes rec-blink { 50% { opacity: 0.25; } }
-
 @media (max-width: 1100px) {
   .layout,
   .layout.live-mode { grid-template-columns: 1fr; }

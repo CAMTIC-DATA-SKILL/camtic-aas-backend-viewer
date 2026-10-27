@@ -12,7 +12,6 @@ window.LiveDashboard = (() => {
     redrawTimer: null,
     winSec: 60,
     hist: [],
-    callbacks: { getPackageId: () => null },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -145,14 +144,6 @@ window.LiveDashboard = (() => {
     badge.className = online ? "status-badge ok" : "status-badge";
   }
 
-  function showRec(status) {
-    const btn = $("live-rec");
-    const text = $("live-rec-text");
-    if (!btn || !text) return;
-    btn.classList.toggle("on", Boolean(status?.on));
-    text.textContent = status?.on ? `REC ${status.file || ""} (${status.rows || 0})` : "REC";
-  }
-
   function formatJson(frame) {
     return JSON.stringify(
       {
@@ -222,49 +213,19 @@ window.LiveDashboard = (() => {
     }
   }
 
-  async function fetchJson(url, options) {
-    const res = await fetch(url, options);
-    if (res.status === 204) return { empty: true };
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    return { empty: false, data: await res.json() };
-  }
-
-  async function recReq(body) {
-    const options = body
-      ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-      : { cache: "no-store" };
-    try {
-      const result = await fetchJson("/api/live/record", options);
-      if (!result.empty) showRec(result.data);
-    } catch (_) { /* ignore */ }
-  }
-
-  function toggleRec() {
-    const on = !$("live-rec").classList.contains("on");
-    recReq({
-      on,
-      packageId: state.callbacks.getPackageId(),
-      source: "opcua",
-    });
-  }
-
   function resetHistory() {
     state.hist = [];
     if ($("live-json")) $("live-json").textContent = "waiting...";
     redraw();
   }
 
-  function init(callbacks) {
-    Object.assign(state.callbacks, callbacks);
+  function init() {
     renderJointChecks();
     renderCartChecks();
     $("live-window")?.addEventListener("change", (e) => {
       state.winSec = Number(e.target.value);
       redraw();
     });
-    $("live-rec")?.addEventListener("click", toggleRec);
-    recReq();
-    setInterval(() => recReq(), 1000);
   }
 
   function show() {

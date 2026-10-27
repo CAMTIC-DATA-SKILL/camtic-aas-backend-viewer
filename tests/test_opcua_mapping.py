@@ -7,6 +7,7 @@ from app.opcua_mapping import (
     as_bool,
     compose_datetime,
     load_mapping,
+    rewrite_node_id,
     robot_status,
     split_engineering_path,
 )
@@ -101,14 +102,11 @@ def test_split_engineering_path():
     assert path == "ActualDataMonitoring.EquipmentState.PowerYesno"
 
 
-def test_load_hh7_template_mapping():
-    mapping = load_mapping("HH7_AAS_Template_v0.2", Path("missing"))
-    assert mapping is not None
-    assert mapping.aas_id == "urn:physical-ai:aas:hyundai:hh7:template:v0.2"
-    ids = mapping.required_node_ids()
-    assert "ns=2;i=1145" in ids
-    assert "ns=2;i=1152" in ids
-    assert "ns=2;s=robot.robot-1.jv1.value_0" in ids
+def test_rewrite_node_id():
+    assert rewrite_node_id("ns=1;i=1145", 2) == "ns=2;i=1145"
+    assert rewrite_node_id("ns=1;s=HH7/J1", 2) == "ns=2;s=HH7/J1"
+    assert rewrite_node_id("ns=2;i=1145", 2) == "ns=2;i=1145"
+    assert rewrite_node_id("ns=1;i=1145", None) == "ns=1;i=1145"
 
 
 def test_apply_engineering_joins_live_values():
@@ -131,3 +129,12 @@ def test_apply_engineering_joins_live_values():
     assert mapped[0]["path"] == "ActualDataMonitoring.PowerYesno"
     assert mapped[0]["value"] == 1
     assert mapped[0]["usable"] is True
+
+    remapped = apply_engineering(
+        nodes,
+        [{"nodeId": "ns=2;i=1008", "value": 7, "status": "Good", "isGood": True}],
+        package_id=package_id,
+        field_namespace=2,
+    )
+    assert remapped[0]["nodeId"] == "ns=2;i=1008"
+    assert remapped[0]["value"] == 7

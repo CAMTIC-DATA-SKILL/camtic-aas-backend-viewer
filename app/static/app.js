@@ -555,9 +555,7 @@ function setLiveView(on) {
 }
 
 if (window.LiveDashboard) {
-  LiveDashboard.init({
-    getPackageId: () => state.packageId,
-  });
+  LiveDashboard.init();
 }
 
 $("reload-btn").addEventListener("click", () => loadPackages(true));

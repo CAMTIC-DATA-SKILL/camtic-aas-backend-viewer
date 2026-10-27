@@ -1,6 +1,8 @@
 """OPC-UA 서버 카탈로그.
 
-접속 정보(엔드포인트·보안 정책)만 둔다. 구독 토픽은 mapping.json 이다.
+접속 정보(엔드포인트·보안 정책)만 둔다.
+구독 토픽은 해당 AAS 산출물 engineering.csv 이다.
+현장 네임스페이스가 산출물(`ns=1`)과 다르면 `nodeIdNamespace` 를 적는다.
 
 찾는 순서:
 1. `{AASX_DATA_DIR}/../opcua/catalog.json`
@@ -31,6 +33,7 @@ class CatalogServer:
     security_policy: str = "None"
     security_mode: str = "SignAndEncrypt"
     aas_id: str = ""
+    node_id_namespace: Optional[int] = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -42,6 +45,8 @@ class CatalogServer:
         }
         if self.aas_id:
             payload["aasId"] = self.aas_id
+        if self.node_id_namespace is not None:
+            payload["nodeIdNamespace"] = self.node_id_namespace
         return payload
 
 
@@ -147,7 +152,20 @@ def _parse_server(raw: dict[str, Any], index: int) -> CatalogServer:
         security_policy=str(raw.get("securityPolicy") or "None").strip() or "None",
         security_mode=str(raw.get("securityMode") or "SignAndEncrypt").strip() or "SignAndEncrypt",
         aas_id=str(raw.get("aasId") or "").strip(),
+        node_id_namespace=_parse_namespace(raw.get("nodeIdNamespace"), index),
     )
+
+
+def _parse_namespace(raw: Any, index: int) -> Optional[int]:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"servers[{index}].nodeIdNamespace 는 정수여야 합니다.") from exc
+    if value < 0:
+        raise ValueError(f"servers[{index}].nodeIdNamespace 는 0 이상이어야 합니다.")
+    return value
 
 
 def _merge_catalog(base: OpcUaCatalog, overlay: OpcUaCatalog) -> OpcUaCatalog:

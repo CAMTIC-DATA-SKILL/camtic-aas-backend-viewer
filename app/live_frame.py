@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime
 from typing import Any, Optional
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 JOINT_RE = re.compile(r"(?:^|[.\-_])J([1-6])(?:[.\-_]|$)", re.I)
 CART_NAMES = {
@@ -164,123 +160,3 @@ def frame_from_mapping(
         "cartesian": cart or None,
         "error": error,
     }
-
-
-def frame_from_collector(payload: dict[str, Any]) -> dict[str, Any]:
-    meta = payload.get("Meta") or {}
-    joint = payload.get("Joint") or {}
-    cart = payload.get("Cartesian") or {}
-    position = cart.get("Position") or {}
-    orientation = cart.get("Orientation") or {}
-    cartesian = {**position, **orientation} if position or orientation else None
-    series: list[dict[str, Any]] = []
-    snapshot: dict[str, Any] = {
-        "Meta": meta,
-        "Status": payload.get("Status") or {},
-        "Joint": joint,
-        "Cartesian": cart,
-        "Errors": payload.get("Errors") or {},
-    }
-    for name, item in joint.items():
-        if not isinstance(item, dict):
-            continue
-        if item.get("Position") is not None:
-            series.append(
-                {
-                    "id": f"Joint/{name}.Position",
-                    "submodelIdShort": "Joint",
-                    "path": f"{name}.Position",
-                    "label": f"{name} Position",
-                    "group": "Joint",
-                    "value": item.get("Position"),
-                    "displayValue": item.get("Position"),
-                }
-            )
-        if item.get("Velocity") is not None:
-            series.append(
-                {
-                    "id": f"Joint/{name}.Velocity",
-                    "submodelIdShort": "Joint",
-                    "path": f"{name}.Velocity",
-                    "label": f"{name} Velocity",
-                    "group": "Joint",
-                    "value": item.get("Velocity"),
-                    "displayValue": item.get("Velocity"),
-                }
-            )
-    if cartesian:
-        for key in ("X", "Y", "Z", "Rx", "Ry", "Rz"):
-            if cartesian.get(key) is None:
-                continue
-            series.append(
-                {
-                    "id": f"Cartesian/{key}",
-                    "submodelIdShort": "Cartesian",
-                    "path": key,
-                    "label": key,
-                    "group": "Cartesian",
-                    "value": cartesian[key],
-                    "displayValue": cartesian[key],
-                }
-            )
-    errors = payload.get("Errors") or {}
-    return {
-        "packageId": None,
-        "aasId": None,
-        "timestamp": meta.get("Timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "seq": meta.get("Seq"),
-        "online": bool(meta.get("Online")),
-        "snapshot": snapshot,
-        "series": series,
-        "joint": joint or None,
-        "cartesian": cartesian,
-        "error": errors.get("LastError") or "",
-        "raw": payload,
-    }
-
-
-def flatten_frame(frame: dict[str, Any]) -> dict[str, Any]:
-    row: dict[str, Any] = {
-        "Timestamp": frame.get("timestamp"),
-        "PackageId": frame.get("packageId"),
-        "AasId": frame.get("aasId"),
-        "Online": int(bool(frame.get("online"))),
-    }
-    for item in frame.get("series") or []:
-        ident = item.get("id")
-        if ident:
-            row[str(ident)] = item.get("value")
-    row["LastError"] = frame.get("error") or ""
-    return row
-
-
-def validate_collector_url(url: str) -> str:
-    text = (url or "").strip()
-    parsed = urlparse(text)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("수집기 URL 은 http(s)://host[:port] 형식이어야 합니다.")
-    if parsed.username or parsed.password:
-        raise ValueError("수집기 URL 에 사용자 정보를 넣을 수 없습니다.")
-    return text.rstrip("/")
-
-
-def collector_data_url(url: str) -> str:
-    base = validate_collector_url(url)
-    parsed = urlparse(base)
-    if parsed.path.rstrip("/").endswith("/api/data"):
-        return base
-    return f"{base}/api/data"
-
-
-def http_get_json(url: str, timeout: float = 2.0) -> dict[str, Any]:
-    request = Request(url, headers={"Accept": "application/json"})
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 503:
-            raise ValueError("수집기에 아직 데이터가 없습니다.") from exc
-        raise ValueError(f"수집기 응답 {exc.code}: {body or exc.reason}") from exc
-    except URLError as exc:
-        raise ValueError(f"수집기에 연결할 수 없습니다: {exc.reason}") from exc

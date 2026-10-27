@@ -9,8 +9,6 @@ from config import Settings, settings
 from utils.log_setup import LogSetup
 
 from .api import router
-from .live_api import router as live_router
-from .live_record import LiveRecorder
 from .opc_ua import OpcUaSession
 from .opcua_api import connect_from_catalog, router as opcua_router
 from .opcua_catalog import load_catalog
@@ -77,7 +75,6 @@ def _ensure_artifacts(repository: AasxRepository) -> None:
 def create_app(app_settings: Settings = settings) -> FastAPI:
     repository = AasxRepository(app_settings.aasx_data_dir, app_settings.artifacts_dir)
     opcua = OpcUaSession(app_settings.opcua)
-    recorder = LiveRecorder(app_settings.record_dir, app_settings.record_interval)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -87,7 +84,6 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         _ensure_artifacts(repository)
         await _startup_opcua(opcua, repository)
         yield
-        await recorder.stop()
         await opcua.disconnect()
 
     app = FastAPI(
@@ -97,8 +93,6 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     )
     app.state.repository = repository
     app.state.opcua = opcua
-    app.state.recorder = recorder
-    app.state.collector_url = app_settings.collector_url or ""
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(app_settings.cors_origins),
@@ -107,7 +101,6 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     )
     app.include_router(router)
     app.include_router(opcua_router)
-    app.include_router(live_router)
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="viewer")
     return app
 

@@ -1,8 +1,10 @@
 """AAS Property 경로와 현장 OPC-UA NodeId 를 연결한다.
 
-산출물 `nodeset.xml` 의 가상 NodeId (`ns=1;i=…`) 가 아니라,
-엣지 서버에 실제로 있는 태그를 읽기 위한 테이블이다.
+라이브 구독의 기본 계약은 산출물 `engineering.csv` 이다.
+미들웨어가 같은 식별자(`i=1145` 등)를 올리면 별도 매핑 파일이 필요 없다.
+현장 네임스페이스만 다르면 catalog 의 `nodeIdNamespace` 로 `ns=1` 을 바꾼다.
 
+PLC 태그처럼 NodeId 자체가 다를 때만 매핑 파일을 쓴다.
 찾는 순서:
 1. `{artifacts}/{package_id}/mapping.json`  (현장 오버라이드)
 2. `{AASX_DATA_DIR}/../mappings/{package_id}.json`  (레포 기본 매핑)
@@ -120,6 +122,14 @@ def apply_mapping(
     return [_apply_binding(binding, by_id) for binding in mapping.bindings]
 
 
+def rewrite_node_id(node_id: str, namespace: Optional[int]) -> str:
+    """engineering.csv 의 `ns=1;…` 를 현장 네임스페이스로 옮긴다."""
+    text = (node_id or "").strip()
+    if namespace is None or not text.startswith("ns=1;"):
+        return text
+    return f"ns={int(namespace)};{text[5:]}"
+
+
 def split_engineering_path(aas_path: str, package_id: str = "") -> tuple[str, str]:
     """`/{package}/{shell}/{submodel}/{a.b}` → (submodelIdShort, dotted path)."""
     parts = [part for part in (aas_path or "").split("/") if part]
@@ -136,6 +146,7 @@ def apply_engineering(
     nodes: list[dict[str, Any]],
     live_values: list[dict[str, Any]],
     package_id: str = "",
+    field_namespace: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     by_id = {item["nodeId"]: item for item in live_values if item.get("nodeId")}
     mapped: list[dict[str, Any]] = []
@@ -143,8 +154,9 @@ def apply_engineering(
         node_id = str(node.get("nodeId") or "")
         if not node_id:
             continue
+        field_id = rewrite_node_id(node_id, field_namespace)
         submodel, path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
-        live = by_id.get(node_id, {})
+        live = by_id.get(field_id, {})
         raw_value = live.get("value")
         usable = _usable(live) and raw_value is not None
         mapped.append(
@@ -153,7 +165,7 @@ def apply_engineering(
                 "submodelIdShort": submodel,
                 "path": path,
                 "semanticId": node.get("semanticId") or None,
-                "nodeId": node_id,
+                "nodeId": field_id,
                 "sourceLabel": node.get("displayName") or None,
                 "transform": "as_is",
                 "value": raw_value,

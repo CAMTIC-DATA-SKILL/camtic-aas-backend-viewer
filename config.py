@@ -132,10 +132,6 @@ class Settings:
 
     opcua: OpcUaConfig
 
-    collector_url: Optional[str]
-    record_dir: Path
-    record_interval: float
-
 
 def load_settings() -> Settings:
     log_dir = os.environ.get("LOG_DIR", "").strip()
@@ -183,9 +179,6 @@ def load_settings() -> Settings:
         log_max_bytes=_int("LOG_MAX_BYTES", 10 * 1024 * 1024),
         log_backup_count=_int("LOG_BACKUP_COUNT", 5),
         opcua=opcua,
-        collector_url=_optional_str("COLLECTOR_URL"),
-        record_dir=_path(_str("RECORD_DIR", "data/records")),
-        record_interval=_float("RECORD_INTERVAL", 1.0),
     )
 
 

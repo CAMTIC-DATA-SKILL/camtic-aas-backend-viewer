@@ -55,9 +55,6 @@ OS 환경 변수가 이미 설정되어 있으면 `.env` 값보다 우선합니�
 | `OPCUA_SECURITY_POLICY` | `None` 또는 보안 정책 | `None` |
 | `OPCUA_CONNECT_MAX_RETRIES` | 최초 접속 재시도 횟수 (`0` = 무제한) | `3` |
 | `OPCUA_SUBSCRIPTION_PERIOD_MS` | 구독 publishing 주기 | `500` |
-| `COLLECTOR_URL` | HDF7-9 수집기 HTTP 기본 주소 | `http://127.0.0.1:4100` |
-| `RECORD_DIR` | 실시간 REC CSV 폴더 | `data/records` |
-| `RECORD_INTERVAL` | REC 기록 간격(초) | `1.0` |
 
 ## 로그
 
@@ -94,24 +91,25 @@ uvicorn, BaSyx SDK 로그도 같은 형식으로 콘솔과 로그 파일에 함�
 
 ### OPC-UA 클라이언트
 
-`middleware_gateway_opc_ua` 와 같은 `asyncua` 래퍼입니다. 유틸리티 → OPC-UA에서 카탈로그 서버를 고르고 접속하면 주소 공간을 탐색하고, 매핑된 NodeId를 한 번에 구독합니다. 패키지를 선택한 뒤 **선택 패키지 AAS 매핑 읽기**를 누르면 `data/mappings/{package_id}.json` (또는 산출물 폴더의 `mapping.json`)에 정의된 AAS Property를 현장 NodeId로 읽어 옵니다. 뷰어의 **현장 값 불러오기**도 같은 매핑을 트리에 덮어씁니다. **실시간 그래프**는 구독 캐시를 0.5초마다 읽어 차트에 올립니다.
+`middleware_gateway_opc_ua` 와 같은 `asyncua` 래퍼입니다. 유틸리티 → OPC-UA에서 카탈로그 서버를 고르고 접속하면 주소 공간을 탐색하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 뷰어의 **현장 값 불러오기**와 **실시간 그래프**도 같은 NodeId를 씁니다. 미들웨어가 `engineering.csv` 와 같은 식별자를 올리면 별도 매핑 파일이 필요 없습니다. 현장 네임스페이스만 다르면 catalog 의 `nodeIdNamespace` 로 `ns=1` 을 바꿉니다.
 
-서버 목록은 `data/opcua/catalog.json` 에 두고, 현장 주소는 git에 올리지 않는 `data/opcua/catalog.local.json` 으로 덮어씁니다. 카탈로그에는 엔드포인트·보안 정책·(선택) `aasId` 만 적습니다. 구독 토픽은 그 AAS 산출물 `engineering.csv` 의 Variable NodeId 입니다. 미들웨어가 같은 NodeId를 올리면 됩니다.
+서버 목록은 `data/opcua/catalog.json` 에 두고, 현장 주소는 git에 올리지 않는 `data/opcua/catalog.local.json` 으로 덮어씁니다. 카탈로그에는 엔드포인트·보안 정책·(선택) `aasId`·`nodeIdNamespace` 만 적습니다.
 
-서버 시작 시 카탈로그 기본 서버에 자동 접속하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 미들웨어가 그 NodeId를 구현하면 `mappings/*.json` 없이 AAS 경로와 값이 맞춰집니다. 뷰어 **실시간 그래프**는 `GET /api/opcua/packages/{package_id}/live` 로 이 캐시를 읽습니다.
+PLC 태그처럼 NodeId 자체가 다를 때만 `data/mappings/{package_id}.json` (또는 산출물 폴더의 `mapping.json`)을 씁니다. 유틸리티의 **선택 패키지 AAS 매핑 읽기**는 매핑 파일이 있으면 그 테이블을, 없으면 `engineering.csv` 를 읽습니다.
+
+서버 시작 시 카탈로그 기본 서버에 자동 접속하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 뷰어 **실시간 그래프**는 `GET /api/opcua/packages/{package_id}/live` 로 이 캐시를 읽습니다.
 
 클라이언트 모듈은 `app/opc_ua/client/` 에 있고, HTTP 요청 사이 연결은 `OpcUaSession` 이 유지합니다.
 
 ### 실시간 그래프
 
-뷰어에서 **실시간 그래프**를 누르면 AAS 트리를 유지한 채, 매핑된 Property를 [HDF7-9](https://github.com/CAMTIC-DATA-SKILL/HDF7-9_data_collector)처럼 시계열로 그립니다.
+뷰어에서 **실시간 그래프**를 누르면 AAS 트리를 유지한 채, 매핑된 Property를 시계열로 그립니다.
 
 - 시리즈 키는 AAS 경로 (`OperationalData/ActualDataMonitoring.EquipmentState.PowerYesno`)
 - 트리의 LIVE 속성을 클릭하면 그래프 표시 on/off, GRAPH 배지로 표시
 - JSON은 AAS 스냅샷(서브모델 → 컬렉션 → Property)
 - Joint / Cartesian 차트는 해당 AAS 경로가 매핑된 경우에만 나타남
 - 시간 범위: 60초 / 10분 / 30분 / 1시간
-- **REC**: 1초 간격으로 `data/records/{package_id}/YYYY-MM-DD-data.csv` 에 AAS 경로 컬럼으로 기록
 
 유틸리티 → OPC-UA에서 카탈로그 서버를 고르고 접속한 뒤 사용합니다. 차트는 Chart.js CDN을 쓰므로 브라우저에 인터넷이 필요합니다.
 
@@ -157,13 +155,9 @@ AAS Part 2 API와 동일하게 **base64url 인코딩**해서 전달합니다. �
 | POST | `/api/opcua/unsubscribe` | 구독 해제 |
 | GET | `/api/opcua/values` | 구독으로 수신한 최신 값 |
 | GET | `/api/opcua/packages/{package_id}/nodes` | 산출물 `engineering.csv` 노드 목록 |
-| GET | `/api/live/status` | 수집기 URL · REC 상태 |
-| GET | `/api/live/collector` | 수집기 `/api/data` 프록시 (`url`, `seq`) |
-| GET | `/api/live/record` | 기록 상태 `{"on","file","rows"}` |
-| POST | `/api/live/record` | 기록 시작/정지 |
 | GET | `/api/opcua/packages/{package_id}/mapping` | AAS Property ↔ 현장 NodeId 매핑 |
 | GET | `/api/opcua/packages/{package_id}/live` | 구독 캐시의 매핑 값 · 그래프 프레임 |
-| POST | `/api/opcua/packages/{package_id}/read` | 매핑된 AAS 속성을 현장 서버에서 읽기 (`?source=engineering` 이면 산출물 NodeId) |
+| POST | `/api/opcua/packages/{package_id}/read` | AAS 속성을 현장에서 읽기 (기본 `engineering.csv`, `?source=mapping` 이면 매핑 파일) |
 
 `{aas_id}` 는 목록 API의 `shells[].idBase64`(base64url) 사용을 권장합니다. 슬래시가 없는 URN 원문도 허용합니다.
 
@@ -215,9 +209,7 @@ app/
   opcua_export.py  OPC-UA nodeset/engineering/syscfg 생성
   opcua_mapping.py AAS Property ↔ 현장 NodeId 매핑
   opcua_api.py     OPC-UA 클라이언트 REST
-  live_api.py      실시간 수집기 프록시 · REC
-  live_frame.py    HDF7-9 형식 프레임 정규화
-  live_record.py   CSV 기록
+  live_frame.py    실시간 그래프 프레임 정규화
   opc_ua/          asyncua 클라이언트 래퍼 + 세션 (middleware 형식)
   serializers.py   간소화 트리 변환
   static/          플랫폼 홈 + HTML 트리 뷰어
