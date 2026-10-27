@@ -52,7 +52,7 @@ window.LiveDashboard = (() => {
     if (typeof Chart === "undefined") return false;
     if (!charts.joint && $("chart-joint")) {
       const jointOpts = chartOpts("Position (deg)", "Velocity");
-      jointOpts.plugins.legend.labels.filter = (item) => !String(item.text).endsWith(" vel");
+      jointOpts.plugins.legend.display = false;
       charts.joint = new Chart($("chart-joint"), {
         type: "line",
         options: jointOpts,
@@ -67,7 +67,7 @@ window.LiveDashboard = (() => {
             ...JOINTS.map((name, index) => ({
               label: `${name} vel`,
               borderColor: LINE_COLORS[index],
-              borderDash: [5, 4],
+              borderDash: [2, 2],
               yAxisID: "y2",
               data: [],
             })),
