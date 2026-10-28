@@ -32,6 +32,27 @@ python -m app
 - 뷰어: http://127.0.0.1:8000/viewer.html?package={package_id}
 - API 문서(Swagger): http://127.0.0.1:8000/docs
 
+## Linux 서비스 (재부팅 자동 기동)
+
+시스템 systemd 유닛으로 등록하면 `systemctl`로 상태를 보고, 부팅 후에도 서버가 올라갑니다. 프로세스는 설치한 사용자 권한으로 실행됩니다.
+
+```bash
+chmod +x scripts/install-service.sh scripts/uninstall-service.sh
+./scripts/install-service.sh
+```
+
+설치 중 `sudo` 암호를 묻습니다. 예전에 사용자 유닛(`systemctl --user`)으로 올려 둔 경우, 설치 스크립트가 그 유닛을 제거하고 시스템 유닛으로 바꿉니다.
+
+| 작업 | 명령 |
+| --- | --- |
+| 상태 | `systemctl status camtic-aas-backend-viewer` |
+| 로그 | `journalctl -u camtic-aas-backend-viewer -f` |
+| 재시작 | `sudo systemctl restart camtic-aas-backend-viewer` |
+| 중지 | `sudo systemctl stop camtic-aas-backend-viewer` |
+| 해제 | `./scripts/uninstall-service.sh` |
+
+호스트/포트는 `.env` 의 `SERVER_HOST` / `SERVER_PORT` 를 따릅니다.
+
 ## 설정 (.env)
 
 모든 설정은 레포 루트의 `.env` 에서 읽으며, 코드에서는 `config.py` 의 `settings` 만 참조합니다.
@@ -213,6 +234,10 @@ app/
   opc_ua/          asyncua 클라이언트 래퍼 + 세션 (middleware 형식)
   serializers.py   간소화 트리 변환
   static/          플랫폼 홈 + HTML 트리 뷰어
+deploy/
+  camtic-aas-backend-viewer.service.in  systemd 유닛 템플릿
 scripts/
   create_sample_aasx.py  샘플 AASX 생성 (python -m scripts.create_sample_aasx)
+  install-service.sh     시스템 systemd 등록 (재부팅 자동 기동)
+  uninstall-service.sh   서비스 해제
 ```

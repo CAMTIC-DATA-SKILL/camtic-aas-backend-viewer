@@ -240,8 +240,11 @@ function renderNode(node, depth, query) {
   if (query && !childNodes.length && !matchesFilter(node, query)) return null;
 
   const hasChildren = childrenOf(node).length > 0;
-  const collapsed = !query && depth >= 2 && !node.hasLive;
-  const li = el("li", { className: hasChildren && collapsed ? "collapsed" : "" });
+  const collapsed = !query && depth >= 2;
+  const li = el("li", {
+    className: hasChildren && collapsed ? "collapsed" : "",
+    "data-tree-key": treeKeyOf(node),
+  });
 
   const caret = el("span", {
     className: hasChildren ? "caret" : "caret leaf",
@@ -276,7 +279,7 @@ function renderNode(node, depth, query) {
 function renderGroup(title, nodes, query) {
   const childNodes = nodes.map((n) => renderNode(n, 1, query)).filter(Boolean);
   if (!childNodes.length) return null;
-  const li = el("li");
+  const li = el("li", { "data-tree-key": `group:${title}` });
   const row = el(
     "div",
     { className: "row", onclick: () => li.classList.toggle("collapsed") },
@@ -288,8 +291,31 @@ function renderGroup(title, nodes, query) {
   return li;
 }
 
-function renderTree() {
+function treeKeyOf(node) {
+  return `${node.modelType}:${node.id || node.path || node.idShort || labelOf(node)}`;
+}
+
+function captureTreeOpen() {
+  const open = new Set();
+  document.querySelectorAll("#tree li[data-tree-key]").forEach((li) => {
+    if (!li.classList.contains("collapsed") && li.querySelector(":scope > ul")) {
+      open.add(li.dataset.treeKey);
+    }
+  });
+  return open;
+}
+
+function restoreTreeOpen(open) {
+  if (!open?.size) return;
+  document.querySelectorAll("#tree li[data-tree-key]").forEach((li) => {
+    if (!li.querySelector(":scope > ul")) return;
+    li.classList.toggle("collapsed", !open.has(li.dataset.treeKey));
+  });
+}
+
+function renderTree({ preserveOpen = false } = {}) {
   if (!state.tree) return;
+  const open = preserveOpen ? captureTreeOpen() : null;
   const query = state.filter.trim().toLowerCase();
   const items = [
     ...state.tree.shells.map((shell) => renderNode(shell, 0, query)),
@@ -298,6 +324,14 @@ function renderTree() {
   $("tree").replaceChildren(
     items.length ? el("ul", {}, items) : el("p", { className: "muted" }, query ? "검색 결과가 없습니다." : "표시할 AAS가 없습니다."),
   );
+  restoreTreeOpen(open);
+  if (state.selectedNode) {
+    const row = document.querySelector(`#tree li[data-tree-key="${CSS.escape(treeKeyOf(state.selectedNode))}"] > .row`);
+    if (row) {
+      row.classList.add("selected");
+      state.selectedRow = row;
+    }
+  }
 }
 
 function setAllCollapsed(collapsed) {
@@ -479,7 +513,7 @@ function stopLiveRefresh() {
 function applyLiveFrame(result) {
   applyLiveValues(result.values);
   if (document.querySelector("#tree .row[data-live-key]")) updateLiveRowTexts();
-  else renderTree();
+  else renderTree({ preserveOpen: true });
   if (state.selectedNode) renderDetail(state.selectedNode);
   if (result.frame) window.LiveDashboard?.ingest?.(result.frame);
   const good = (result.values || []).filter((item) => item.usable || item.isGood).length;
@@ -554,6 +588,16 @@ function setLiveView(on) {
   $("live-view-btn").textContent = on ? "그래프 닫기" : "실시간 그래프";
 }
 
+function setLiveJsonView(on) {
+  const dash = window.LiveDashboard;
+  if (!dash) {
+    setLiveStatus("실시간 스크립트를 불러오지 못했습니다. 새로고침하세요.", true);
+    return;
+  }
+  if (on) dash.showJson();
+  else dash.hideJson();
+}
+
 if (window.LiveDashboard) {
   LiveDashboard.init();
 }
@@ -563,6 +607,7 @@ $("expand-btn").addEventListener("click", () => setAllCollapsed(false));
 $("collapse-btn").addEventListener("click", () => setAllCollapsed(true));
 $("live-btn").addEventListener("click", () => tryLoadLiveValues());
 $("live-view-btn").addEventListener("click", () => setLiveView(!window.LiveDashboard?.isVisible()));
+$("live-json-btn").addEventListener("click", () => setLiveJsonView(!window.LiveDashboard?.isJsonVisible()));
 
 let searchTimer;
 $("search").addEventListener("input", (e) => {

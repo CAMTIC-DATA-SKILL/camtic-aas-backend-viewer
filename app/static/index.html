@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Data Platform</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body class="platform">
   <header class="topbar">
@@ -97,6 +97,9 @@
             <div class="opcua-actions">
               <button id="opcua-connect-btn" type="button" class="btn-primary">접속</button>
               <button id="opcua-disconnect-btn" type="button" disabled>연결 종료</button>
+              <button id="opcua-read-once-btn" type="button" class="btn-secondary" disabled>한차례 읽기</button>
+              <button id="opcua-subscribe-btn" type="button" class="btn-secondary" disabled>구독</button>
+              <button id="opcua-monitor-stop-btn" type="button" class="btn-secondary" disabled>실시간 중지</button>
               <button id="opcua-read-package-btn" type="button" class="btn-secondary" disabled>선택 패키지 AAS 매핑 읽기</button>
             </div>
           </div>
@@ -109,6 +112,15 @@
             <div class="opcua-detail-wrap">
               <h3>노드</h3>
               <div id="opcua-detail" class="detail"><p class="muted">트리에서 노드를 선택하세요.</p></div>
+            </div>
+          </div>
+          <div class="opcua-monitor-wrap">
+            <div class="opcua-monitor-head">
+              <h3>값 모니터</h3>
+              <span id="opcua-monitor-meta" class="muted">Variable까지 펼치지 않아도 됩니다. Object를 고르고 한차례 읽기 또는 구독을 누르세요.</span>
+            </div>
+            <div id="opcua-monitor" class="opcua-monitor">
+              <p class="muted">아직 표시할 값이 없습니다.</p>
             </div>
           </div>
         </section>
@@ -143,6 +155,6 @@
     </form>
   </dialog>
 
-  <script src="platform.js"></script>
+  <script src="platform.js?v=9"></script>
 </body>
 </html>

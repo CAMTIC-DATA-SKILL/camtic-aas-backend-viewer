@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <header class="topbar">
@@ -32,6 +32,7 @@
         <button id="collapse-btn" type="button">모두 접기</button>
         <button id="live-btn" type="button">현장 값 불러오기</button>
         <button id="live-view-btn" type="button" class="btn-primary">실시간 그래프</button>
+        <button id="live-json-btn" type="button" class="btn-primary">실시간 JSON</button>
         <span id="live-status" class="muted"></span>
       </div>
       <div id="tree" class="tree"></div>
@@ -58,7 +59,6 @@
           </select>
         </div>
       </div>
-      <pre id="live-json" class="live-json">waiting...</pre>
       <div class="live-charts">
         <div class="live-chart-panel">
           <h3>Joint Position / Velocity <span class="muted">실선 Position · 점선 Velocity</span></h3>
@@ -74,8 +74,23 @@
     </section>
   </div>
 
+  <dialog id="live-json-dialog" class="live-json-dialog">
+    <header>
+      <div class="live-title">
+        <h2>실시간 데이터 JSON</h2>
+        <span id="live-json-badge" class="status-badge">offline</span>
+        <span id="live-json-ts" class="muted"></span>
+      </div>
+      <div class="live-json-actions">
+        <button id="live-json-copy" type="button">복사</button>
+        <button id="live-json-close" type="button" class="icon-btn" aria-label="닫기">×</button>
+      </div>
+    </header>
+    <pre id="live-json" class="live-json">waiting...</pre>
+  </dialog>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <script src="live.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="live.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

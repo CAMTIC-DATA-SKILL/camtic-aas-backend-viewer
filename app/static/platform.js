@@ -13,6 +13,9 @@ const state = {
     pollTimer: null,
     statusLoaded: false,
     catalog: { defaultServerId: "", servers: [] },
+    subscribedNodeIds: [],
+    expandedIds: new Set(),
+    monitor: { mode: null, nodes: [], values: {}, title: "", truncated: false },
   },
 };
 
@@ -102,6 +105,10 @@ function updateActionButtons() {
   $("download-artifacts-btn").disabled = !hasSelection;
   $("delete-btn").disabled = !hasSelection;
   $("opcua-read-package-btn").disabled = !hasSelection || !state.opcua.connected;
+  const opcuaReady = state.opcua.connected;
+  $("opcua-read-once-btn").disabled = !opcuaReady;
+  $("opcua-subscribe-btn").disabled = !opcuaReady;
+  $("opcua-monitor-stop-btn").disabled = state.opcua.monitor.mode !== "live";
 }
 
 async function loadPackages(reload = false) {
@@ -408,6 +415,7 @@ function applyCatalogServer(serverId, { fillEmptyOnly = false } = {}) {
 function renderOpcuaStatus(status) {
   state.opcua.connected = Boolean(status.connected);
   state.opcua.endpoint = status.endpoint || "";
+  state.opcua.subscribedNodeIds = status.subscribedNodeIds || [];
   const badge = $("opcua-badge");
   badge.textContent = status.connected ? "연결됨" : "미연결";
   badge.className = `status-badge ${status.connected ? "ok" : "warn"}`;
@@ -438,6 +446,11 @@ function opcuaTreeLabel(item) {
   return item.displayName || item.browseName || item.nodeId;
 }
 
+function setOpcuaExpanded(nodeId, open) {
+  if (open) state.opcua.expandedIds.add(nodeId);
+  else state.opcua.expandedIds.delete(nodeId);
+}
+
 function renderOpcuaChildren(container, items) {
   if (!items.length) {
     container.replaceChildren(el("p", { className: "muted" }, "하위 노드가 없습니다."));
@@ -448,9 +461,10 @@ function renderOpcuaChildren(container, items) {
     {},
     items.map((item) => {
       const expandable = item.nodeClass !== "Variable" && item.nodeClass !== "Method";
+      const shouldOpen = expandable && state.opcua.expandedIds.has(item.nodeId);
       const li = el(
         "li",
-        { className: expandable ? "collapsed" : "" },
+        { className: expandable ? "collapsed" : "", "data-node-id": item.nodeId },
         el(
           "div",
           {
@@ -458,27 +472,45 @@ function renderOpcuaChildren(container, items) {
             onclick: (e) => {
               e.stopPropagation();
               selectOpcuaNode(item, li.querySelector(".row"));
-              if (expandable) toggleOpcuaNode(li, item);
+              if (expandable && !li.querySelector(":scope > ul, :scope > .muted")) {
+                toggleOpcuaNode(li, item, { forceOpen: true });
+              }
             },
           },
-          el("span", { className: expandable ? "caret" : "caret leaf" }),
+          el("span", {
+            className: expandable ? "caret" : "caret leaf",
+            onclick: (e) => {
+              e.stopPropagation();
+              if (expandable) toggleOpcuaNode(li, item);
+            },
+          }),
           el("span", { className: `badge ${item.nodeClass}` }, item.nodeClass || "Node"),
           el("span", { className: "label" }, opcuaTreeLabel(item)),
         ),
       );
+      if (shouldOpen) queueMicrotask(() => toggleOpcuaNode(li, item, { forceOpen: true }));
       return li;
     }),
   );
   container.replaceChildren(list);
 }
 
-async function toggleOpcuaNode(li, item) {
+async function toggleOpcuaNode(li, item, { forceOpen = false } = {}) {
+  if (li.dataset.loading === "1") return;
   const existing = li.querySelector(":scope > ul, :scope > .muted");
   if (existing) {
+    if (forceOpen) {
+      li.classList.remove("collapsed");
+      setOpcuaExpanded(item.nodeId, true);
+      return;
+    }
     li.classList.toggle("collapsed");
+    setOpcuaExpanded(item.nodeId, !li.classList.contains("collapsed"));
     return;
   }
   li.classList.remove("collapsed");
+  setOpcuaExpanded(item.nodeId, true);
+  li.dataset.loading = "1";
   const holder = el("p", { className: "muted" }, "불러오는 중...");
   li.append(holder);
   try {
@@ -494,6 +526,8 @@ async function toggleOpcuaNode(li, item) {
   } catch (e) {
     holder.className = "error-text";
     holder.textContent = e.message;
+  } finally {
+    delete li.dataset.loading;
   }
 }
 
@@ -532,12 +566,12 @@ function renderOpcuaDetail(item, live) {
         ? el("tr", {}, el("th", {}, "SourceTime"), el("td", {}, live.sourceTimestamp || "-"))
         : null,
     ),
-    el("div", { className: "opcua-value" }, live ? formatOpcuaValue(live.value) : "값을 읽으면 여기에 표시됩니다."),
+    el("div", { className: "opcua-value" }, live ? formatOpcuaValue(live.value) : "한차례 읽기 또는 구독하면 아래 모니터에 값이 표시됩니다."),
     el(
       "div",
       { className: "opcua-write-row" },
-      el("button", { type: "button", className: "btn-secondary", onclick: () => readOpcuaNode(item) }, "읽기"),
-      el("button", { type: "button", className: "btn-secondary", onclick: () => subscribeOpcuaNode(item) }, "구독"),
+      el("button", { type: "button", className: "btn-secondary", onclick: () => readOpcuaTargets(item) }, "한차례 읽기"),
+      el("button", { type: "button", className: "btn-secondary", onclick: () => subscribeOpcuaTargets(item) }, "구독"),
     ),
     el(
       "div",
@@ -549,17 +583,7 @@ function renderOpcuaDetail(item, live) {
 }
 
 async function readOpcuaNode(item) {
-  try {
-    const result = await fetchJson("/api/opcua/read", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeIds: [item.nodeId] }),
-    });
-    renderOpcuaDetail(item, result.values?.[0]);
-    showOpcuaMessage(`읽기 완료: ${item.nodeId}`, false);
-  } catch (e) {
-    showOpcuaMessage(e.message, true);
-  }
+  await readOpcuaTargets(item);
 }
 
 function parseWriteValue(raw) {
@@ -586,7 +610,7 @@ async function writeOpcuaNode(item) {
       body: JSON.stringify({ nodeId: item.nodeId, value: parseWriteValue(raw) }),
     });
     showOpcuaMessage(`쓰기 완료: ${item.nodeId}`, false);
-    await readOpcuaNode(item);
+    await readOpcuaTargets(item);
   } catch (e) {
     showOpcuaMessage(e.message, true);
   }
@@ -599,25 +623,231 @@ function stopOpcuaPoll() {
   }
 }
 
-async function subscribeOpcuaNode(item) {
+function formatOpcuaTime(iso) {
+  if (!iso) return "-";
   try {
-    await fetchJson("/api/opcua/subscribe", {
+    return new Date(iso).toLocaleTimeString("ko-KR");
+  } catch (_) {
+    return iso;
+  }
+}
+
+function monitorNodeLabel(node) {
+  const name = node.displayName || node.browseName || "";
+  const generic = !name || name === node.nodeId || /^value[_-]?\d+$/i.test(name);
+  if (!generic) return name;
+  const id = node.nodeId || "";
+  const tail = id.replace(/^ns=\d+;[is]=/i, "").split(/[\/.]/).filter(Boolean).slice(-3).join(".");
+  return tail || name || id;
+}
+
+function subscribedAsMonitorNodes() {
+  return (state.opcua.subscribedNodeIds || []).map((nodeId) => ({
+    nodeId,
+    browseName: nodeId,
+    displayName: nodeId,
+    nodeClass: "Variable",
+  }));
+}
+
+async function resolveOpcuaVariables(item) {
+  if (!item && state.opcua.subscribedNodeIds.length) {
+    return { variables: subscribedAsMonitorNodes(), truncated: false, fromSubscription: true };
+  }
+  const qs = item?.nodeId ? `?nodeId=${encodeURIComponent(item.nodeId)}` : "";
+  const result = await fetchJson(`/api/opcua/variables${qs}`);
+  return { ...result, fromSubscription: false };
+}
+
+function valuesByNodeId(values) {
+  const map = {};
+  for (const item of values || []) {
+    if (item?.nodeId) map[item.nodeId] = item;
+  }
+  return map;
+}
+
+function setMonitorMeta(text) {
+  $("opcua-monitor-meta").textContent = text;
+}
+
+function renderOpcuaMonitor() {
+  const monitor = state.opcua.monitor;
+  const box = $("opcua-monitor");
+  if (!monitor.nodes.length) {
+    box.replaceChildren(el("p", { className: "muted" }, "아직 표시할 값이 없습니다."));
+    setMonitorMeta("Variable까지 펼치지 않아도 됩니다. Object를 고르고 한차례 읽기 또는 구독을 누르세요.");
+    updateActionButtons();
+    return;
+  }
+  const modeLabel = monitor.mode === "live" ? "실시간 구독" : "한차례 읽기";
+  const extra = monitor.truncated ? " · 일부만 표시(200개 제한)" : "";
+  setMonitorMeta(`${modeLabel} · ${monitor.nodes.length}개${extra}${monitor.title ? ` · ${monitor.title}` : ""}`);
+  box.replaceChildren(
+    el(
+      "table",
+      {},
+      el(
+        "tr",
+        {},
+        el("th", {}, "이름"),
+        el("th", {}, "값"),
+        el("th", {}, "상태"),
+        el("th", {}, "시각"),
+        el("th", {}, "NodeId"),
+      ),
+      monitor.nodes.map((node) => {
+        const live = monitor.values[node.nodeId] || {};
+        return el(
+          "tr",
+          { "data-node-id": node.nodeId },
+          el("td", {}, monitorNodeLabel(node)),
+          el("td", { className: "value-cell" }, live.nodeId ? formatOpcuaValue(live.value) : "-"),
+          el("td", {}, live.status || "-"),
+          el("td", { className: "muted" }, formatOpcuaTime(live.sourceTimestamp)),
+          el("td", { className: "muted" }, node.nodeId),
+        );
+      }),
+    ),
+  );
+  updateActionButtons();
+}
+
+function updateOpcuaMonitorValues(values, { flash = false } = {}) {
+  const next = { ...state.opcua.monitor.values, ...valuesByNodeId(values) };
+  const prev = state.opcua.monitor.values;
+  state.opcua.monitor.values = next;
+  const table = $("opcua-monitor").querySelector("table");
+  if (!table) {
+    renderOpcuaMonitor();
+    return;
+  }
+  for (const node of state.opcua.monitor.nodes) {
+    const live = next[node.nodeId];
+    if (!live) continue;
+    const row = [...table.querySelectorAll("tr[data-node-id]")].find((el) => el.dataset.nodeId === node.nodeId);
+    if (!row) continue;
+    const cells = row.children;
+    const nextValue = formatOpcuaValue(live.value);
+    const changed = flash && prev[node.nodeId] && formatOpcuaValue(prev[node.nodeId].value) !== nextValue;
+    cells[1].textContent = nextValue;
+    cells[2].textContent = live.status || "-";
+    cells[3].textContent = formatOpcuaTime(live.sourceTimestamp);
+    row.classList.toggle("changed", Boolean(changed));
+  }
+}
+
+function startOpcuaMonitorPoll() {
+  stopOpcuaPoll();
+  state.opcua.monitor.mode = "live";
+  updateActionButtons();
+  state.opcua.pollTimer = setInterval(async () => {
+    if (state.opcua.monitor.mode !== "live") return;
+    try {
+      const result = await fetchJson("/api/opcua/values");
+      updateOpcuaMonitorValues(result.values, { flash: true });
+      const selected = state.opcua.selected;
+      if (selected && result.values) {
+        const live = result.values.find((item) => item.nodeId === selected.nodeId);
+        if (live) renderOpcuaDetail(selected, live);
+      }
+    } catch (_) { /* ignore poll errors */ }
+  }, 500);
+}
+
+function stopOpcuaMonitor() {
+  stopOpcuaPoll();
+  if (state.opcua.monitor.mode === "live") {
+    state.opcua.monitor.mode = "read";
+    renderOpcuaMonitor();
+    showOpcuaMessage("실시간 모니터를 중지했습니다. 마지막 값은 유지됩니다.", false);
+  }
+  updateActionButtons();
+}
+
+function resetOpcuaMonitor() {
+  stopOpcuaPoll();
+  state.opcua.monitor = { mode: null, nodes: [], values: {}, title: "", truncated: false };
+  renderOpcuaMonitor();
+}
+
+async function readOpcuaTargets(item = state.opcua.selected) {
+  showOpcuaMessage("변수를 모아 한 번 읽는 중...", false);
+  try {
+    const resolved = await resolveOpcuaVariables(item);
+    const nodes = resolved.variables || [];
+    if (!nodes.length) {
+      showOpcuaMessage("읽을 Variable이 없습니다. Object나 Variable을 선택하세요.", true);
+      return;
+    }
+    const result = await fetchJson("/api/opcua/read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeIds: [item.nodeId] }),
+      body: JSON.stringify({ nodeIds: nodes.map((node) => node.nodeId) }),
     });
-    showOpcuaMessage(`구독 시작: ${item.nodeId}`, false);
     stopOpcuaPoll();
-    state.opcua.pollTimer = setInterval(async () => {
-      if (!state.opcua.selected || state.opcua.selected.nodeId !== item.nodeId) return;
-      try {
-        const result = await fetchJson(`/api/opcua/values?nodeId=${encodeURIComponent(item.nodeId)}`);
-        if (result.values?.[0]) renderOpcuaDetail(item, result.values[0]);
-      } catch (_) { /* ignore poll errors */ }
-    }, 1000);
+    state.opcua.monitor = {
+      mode: "read",
+      nodes,
+      values: valuesByNodeId(result.values),
+      title: item ? opcuaTreeLabel(item) : resolved.fromSubscription ? "현재 구독" : "Objects",
+      truncated: Boolean(resolved.truncated),
+    };
+    renderOpcuaMonitor();
+    if (item && result.values?.[0] && nodes.length === 1) {
+      renderOpcuaDetail(item, result.values[0]);
+    }
+    showOpcuaMessage(`한차례 읽기 완료: ${nodes.length}개`, false);
   } catch (e) {
     showOpcuaMessage(e.message, true);
   }
+}
+
+async function subscribeOpcuaTargets(item = state.opcua.selected) {
+  showOpcuaMessage("하위 Variable을 모아 구독하는 중...", false);
+  try {
+    const resolved = await resolveOpcuaVariables(item);
+    const nodes = resolved.variables || [];
+    if (!nodes.length) {
+      showOpcuaMessage("구독할 Variable이 없습니다. Object나 Variable을 선택하세요.", true);
+      return;
+    }
+    const nodeIds = nodes.map((node) => node.nodeId);
+    const already = new Set(state.opcua.subscribedNodeIds);
+    const missing = nodeIds.filter((id) => !already.has(id));
+    if (missing.length) {
+      const status = await fetchJson("/api/opcua/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodeIds: missing, replace: false }),
+      });
+      renderOpcuaStatus({ ...status, connected: true, endpoint: state.opcua.endpoint });
+    }
+    const snapshot = await fetchJson("/api/opcua/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeIds }),
+    }).catch(() => ({ values: [] }));
+    state.opcua.monitor = {
+      mode: "live",
+      nodes,
+      values: valuesByNodeId(snapshot.values),
+      title: item ? opcuaTreeLabel(item) : resolved.fromSubscription ? "현재 구독" : "Objects",
+      truncated: Boolean(resolved.truncated),
+    };
+    renderOpcuaMonitor();
+    startOpcuaMonitorPoll();
+    if (item && snapshot.values?.[0] && nodes.length === 1) {
+      renderOpcuaDetail(item, snapshot.values[0]);
+    }
+    showOpcuaMessage(`구독 모니터 시작: ${nodes.length}개 · Variable을 펼치지 않아도 값이 갱신됩니다.`, false);
+  } catch (e) {
+    showOpcuaMessage(e.message, true);
+  }
+}
+
+async function subscribeOpcuaNode(item) {
+  await subscribeOpcuaTargets(item);
 }
 
 async function loadOpcuaCatalog() {
@@ -672,7 +902,7 @@ async function connectOpcua() {
         false,
       );
     }
-    await loadOpcuaRoot();
+    if (!$("opcua-tree").querySelector("ul")) await loadOpcuaRoot();
   } catch (e) {
     showOpcuaMessage(e.message, true);
     $("opcua-connect-btn").disabled = false;
@@ -685,8 +915,10 @@ async function disconnectOpcua() {
     const status = await fetchJson("/api/opcua/disconnect", { method: "POST" });
     renderOpcuaStatus(status);
     state.opcua.selected = null;
+    state.opcua.expandedIds = new Set();
     $("opcua-tree").replaceChildren(el("p", { className: "muted" }, "서버에 접속하면 Objects 하위 노드가 표시됩니다."));
     $("opcua-detail").replaceChildren(el("p", { className: "muted" }, "트리에서 노드를 선택하세요."));
+    resetOpcuaMonitor();
     showOpcuaMessage("연결을 종료했습니다.", false);
   } catch (e) {
     showOpcuaMessage(e.message, true);
@@ -734,6 +966,9 @@ async function readSelectedPackageNodes() {
 
 $("opcua-connect-btn").addEventListener("click", connectOpcua);
 $("opcua-disconnect-btn").addEventListener("click", disconnectOpcua);
+$("opcua-read-once-btn").addEventListener("click", () => readOpcuaTargets());
+$("opcua-subscribe-btn").addEventListener("click", () => subscribeOpcuaTargets());
+$("opcua-monitor-stop-btn").addEventListener("click", stopOpcuaMonitor);
 $("opcua-read-package-btn").addEventListener("click", readSelectedPackageNodes);
 $("opcua-server").addEventListener("change", () => {
   const serverId = $("opcua-server").value;

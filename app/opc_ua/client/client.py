@@ -211,6 +211,39 @@ class OpcUaClient:
             for desc in descriptions
         ]
 
+    async def read_browse_item(self, node_id: str) -> BrowseItem:
+        node = self.get_node(node_id)
+        node_class, browse_name, display_name = await asyncio.gather(
+            node.read_node_class(),
+            node.read_browse_name(),
+            node.read_display_name(),
+        )
+        text = display_name.Text if display_name is not None else ""
+        return BrowseItem(
+            node_id=node.nodeid.to_string(),
+            browse_name=browse_name.to_string(),
+            display_name=text or browse_name.Name or node_id,
+            node_class=node_class.name,
+        )
+
+    async def browse_variables(
+        self,
+        node_id: str | None = None,
+        *,
+        max_nodes: int = 200,
+        max_depth: int = 10,
+    ) -> tuple[list[BrowseItem], bool]:
+        from ...opcua_browse_vars import walk_variables
+
+        start_item = await self.read_browse_item(node_id) if node_id else None
+        return await walk_variables(
+            self.browse,
+            node_id,
+            start_item=start_item,
+            max_nodes=max_nodes,
+            max_depth=max_depth,
+        )
+
     async def subscribe(
         self,
         node_ids: Iterable[str],

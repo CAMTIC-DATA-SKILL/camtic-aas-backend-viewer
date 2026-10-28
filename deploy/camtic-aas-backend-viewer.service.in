@@ -1,0 +1,20 @@
+[Unit]
+Description=CAMTIC AAS Backend Viewer
+Documentation=file://@ROOT@/README.md
+After=network.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@GROUP@
+WorkingDirectory=@ROOT@
+Environment=VIRTUAL_ENV=@ROOT@/.venv
+Environment=PATH=@ROOT@/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@ROOT@/.venv/bin/python -m app
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

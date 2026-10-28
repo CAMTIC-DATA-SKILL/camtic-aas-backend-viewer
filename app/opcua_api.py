@@ -48,6 +48,7 @@ class WriteBody(BaseModel):
 
 class SubscribeBody(BaseModel):
     nodeIds: list[str] = Field(default_factory=list)
+    replace: bool = True
 
 
 def get_repository(request: Request) -> AasxRepository:
@@ -331,6 +332,15 @@ async def opcua_namespaces(session: OpcUaSession = Depends(get_opcua)) -> dict[s
         raise _http_error(exc) from exc
 
 
+def _browse_item_dict(item) -> dict[str, Any]:
+    return {
+        "nodeId": item.node_id,
+        "browseName": item.browse_name,
+        "displayName": item.display_name,
+        "nodeClass": item.node_class,
+    }
+
+
 @router.get("/browse")
 async def opcua_browse(
     nodeId: Optional[str] = None,
@@ -342,15 +352,23 @@ async def opcua_browse(
         raise _http_error(exc) from exc
     return {
         "parentNodeId": nodeId,
-        "children": [
-            {
-                "nodeId": item.node_id,
-                "browseName": item.browse_name,
-                "displayName": item.display_name,
-                "nodeClass": item.node_class,
-            }
-            for item in items
-        ],
+        "children": [_browse_item_dict(item) for item in items],
+    }
+
+
+@router.get("/variables")
+async def opcua_variables(
+    nodeId: Optional[str] = None,
+    session: OpcUaSession = Depends(get_opcua),
+) -> dict[str, Any]:
+    try:
+        items, truncated = await session.browse_variables(nodeId)
+    except Exception as exc:
+        raise _http_error(exc) from exc
+    return {
+        "parentNodeId": nodeId,
+        "truncated": truncated,
+        "variables": [_browse_item_dict(item) for item in items],
     }
 
 
@@ -384,7 +402,10 @@ async def opcua_subscribe(
     session: OpcUaSession = Depends(get_opcua),
 ) -> dict[str, Any]:
     try:
-        return await session.subscribe(body.nodeIds)
+        node_ids = list(dict.fromkeys(body.nodeIds))
+        if not body.replace:
+            node_ids = list(dict.fromkeys([*session.subscribed_node_ids, *node_ids]))
+        return await session.subscribe(node_ids)
     except Exception as exc:
         raise _http_error(exc) from exc
 

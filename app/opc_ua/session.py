@@ -122,6 +122,19 @@ class OpcUaSession:
     async def browse(self, node_id: Optional[str] = None) -> list[BrowseItem]:
         return await self.require_client().browse(node_id)
 
+    async def browse_variables(
+        self,
+        node_id: Optional[str] = None,
+        *,
+        max_nodes: int = 200,
+        max_depth: int = 10,
+    ) -> tuple[list[BrowseItem], bool]:
+        return await self.require_client().browse_variables(
+            node_id,
+            max_nodes=max_nodes,
+            max_depth=max_depth,
+        )
+
     async def namespaces(self) -> list[str]:
         return await self.require_client().namespaces()
 

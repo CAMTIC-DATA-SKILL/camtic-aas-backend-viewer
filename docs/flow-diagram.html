@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  svg { display: block; font-family: "NanumSquare", "Noto Sans CJK KR", "Noto Sans CJK TC", sans-serif; }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="780" viewBox="0 0 1680 780">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <filter id="sh" x="-8%" y="-8%" width="116%" height="116%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <text x="840" y="58" text-anchor="middle" font-size="32" font-weight="800" fill="#0f172a">현장 데이터가 화면에 보이기까지</text>
+  <text x="840" y="94" text-anchor="middle" font-size="17" fill="#64748b">설비 값 → 수집 → 표준 변환 → 디지털 자산 연결 → 화면 확인</text>
+
+  <!-- 1 현장 -->
+  <g filter="url(#sh)">
+    <rect x="40" y="140" width="276" height="500" rx="20" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+  </g>
+  <rect x="40" y="140" width="276" height="88" rx="20" fill="#475569"/>
+  <rect x="40" y="196" width="276" height="32" fill="#475569"/>
+  <text x="178" y="176" text-anchor="middle" font-size="15" fill="#e2e8f0" font-weight="700">1</text>
+  <text x="178" y="208" text-anchor="middle" font-size="24" font-weight="800" fill="#ffffff">현장 설비</text>
+  <text x="178" y="262" text-anchor="middle" font-size="16" fill="#334155">로봇 · PLC</text>
+  <text x="178" y="288" text-anchor="middle" font-size="14" fill="#64748b">실제 장비가 값을 만듦</text>
+  <rect x="60" y="318" width="236" height="292" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="78" y="350" font-size="13" font-weight="800" fill="#475569">핵심 파이프라인</text>
+  <circle cx="86" cy="384" r="5" fill="#475569"/>
+  <text x="102" y="390" font-size="15" fill="#0f172a">전원, 동작, 위치 등</text>
+  <text x="102" y="412" font-size="15" fill="#0f172a">실시간 값이 발생</text>
+  <circle cx="86" cy="450" r="5" fill="#475569"/>
+  <text x="102" y="456" font-size="15" fill="#0f172a">값은 장비 안에만 있음</text>
+  <circle cx="86" cy="496" r="5" fill="#475569"/>
+  <text x="102" y="502" font-size="15" fill="#0f172a">바깥으로 보내는 역할은</text>
+  <text x="102" y="524" font-size="15" fill="#0f172a">하지 않음</text>
+
+  <!-- 2 Collector -->
+  <g filter="url(#sh)">
+    <rect x="368" y="140" width="276" height="500" rx="20" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  </g>
+  <rect x="368" y="140" width="276" height="88" rx="20" fill="#ea580c"/>
+  <rect x="368" y="196" width="276" height="32" fill="#ea580c"/>
+  <text x="506" y="176" text-anchor="middle" font-size="15" fill="#ffedd5" font-weight="700">2</text>
+  <text x="506" y="208" text-anchor="middle" font-size="24" font-weight="800" fill="#ffffff">Collector</text>
+  <text x="506" y="262" text-anchor="middle" font-size="16" fill="#9a3412">수집기</text>
+  <text x="506" y="288" text-anchor="middle" font-size="14" fill="#64748b">설비 값을 읽어 옴</text>
+  <rect x="388" y="318" width="236" height="292" rx="12" fill="#ffffff" stroke="#fed7aa"/>
+  <text x="406" y="350" font-size="13" font-weight="800" fill="#c2410c">핵심 파이프라인</text>
+  <circle cx="414" cy="384" r="5" fill="#ea580c"/>
+  <text x="430" y="390" font-size="15" fill="#0f172a">설비를 주기적으로 읽음</text>
+  <circle cx="414" cy="430" r="5" fill="#ea580c"/>
+  <text x="430" y="436" font-size="15" fill="#0f172a">값을 메시지로 묶음</text>
+  <circle cx="414" cy="476" r="5" fill="#ea580c"/>
+  <text x="430" y="482" font-size="15" fill="#0f172a">수집 통로로 전달</text>
+  <text x="430" y="504" font-size="13" fill="#78716c">(ZeroMQ)</text>
+
+  <!-- 3 Middleware -->
+  <g filter="url(#sh)">
+    <rect x="696" y="140" width="276" height="500" rx="20" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+  </g>
+  <rect x="696" y="140" width="276" height="88" rx="20" fill="#7c3aed"/>
+  <rect x="696" y="196" width="276" height="32" fill="#7c3aed"/>
+  <text x="834" y="176" text-anchor="middle" font-size="15" fill="#ede9fe" font-weight="700">3</text>
+  <text x="834" y="208" text-anchor="middle" font-size="24" font-weight="800" fill="#ffffff">Middleware</text>
+  <text x="834" y="262" text-anchor="middle" font-size="16" fill="#5b21b6">중계기</text>
+  <text x="834" y="288" text-anchor="middle" font-size="14" fill="#64748b">형식을 맞춰 공개</text>
+  <rect x="716" y="318" width="236" height="292" rx="12" fill="#ffffff" stroke="#ddd6fe"/>
+  <text x="734" y="350" font-size="13" font-weight="800" fill="#6d28d9">핵심 파이프라인</text>
+  <circle cx="742" cy="384" r="5" fill="#7c3aed"/>
+  <text x="758" y="390" font-size="15" fill="#0f172a">수집 메시지를 받음</text>
+  <circle cx="742" cy="430" r="5" fill="#7c3aed"/>
+  <text x="758" y="436" font-size="15" fill="#0f172a">산업 표준으로 변환</text>
+  <text x="758" y="458" font-size="13" fill="#78716c">(OPC UA)</text>
+  <circle cx="742" cy="496" r="5" fill="#7c3aed"/>
+  <text x="758" y="502" font-size="15" fill="#0f172a">다른 시스템이 읽을</text>
+  <text x="758" y="524" font-size="15" fill="#0f172a">수 있게 공개</text>
+
+  <!-- 4 AAS -->
+  <g filter="url(#sh)">
+    <rect x="1024" y="140" width="276" height="500" rx="20" fill="#f0fdfa" stroke="#0d9488" stroke-width="2"/>
+  </g>
+  <rect x="1024" y="140" width="276" height="88" rx="20" fill="#0d9488"/>
+  <rect x="1024" y="196" width="276" height="32" fill="#0d9488"/>
+  <text x="1162" y="176" text-anchor="middle" font-size="15" fill="#ccfbf1" font-weight="700">4</text>
+  <text x="1162" y="208" text-anchor="middle" font-size="24" font-weight="800" fill="#ffffff">AAS 서버</text>
+  <text x="1162" y="262" text-anchor="middle" font-size="16" fill="#115e59">디지털 자산 관리</text>
+  <text x="1162" y="288" text-anchor="middle" font-size="14" fill="#64748b">값과 모델을 연결</text>
+  <rect x="1044" y="318" width="236" height="292" rx="12" fill="#ffffff" stroke="#99f6e4"/>
+  <text x="1062" y="350" font-size="13" font-weight="800" fill="#0f766e">핵심 파이프라인</text>
+  <circle cx="1070" cy="384" r="5" fill="#0d9488"/>
+  <text x="1086" y="390" font-size="15" fill="#0f172a">표준 값을 구독</text>
+  <circle cx="1070" cy="430" r="5" fill="#0d9488"/>
+  <text x="1086" y="436" font-size="15" fill="#0f172a">디지털 자산(AAS)</text>
+  <text x="1086" y="458" font-size="15" fill="#0f172a">항목에 붙임</text>
+  <circle cx="1070" cy="496" r="5" fill="#0d9488"/>
+  <text x="1086" y="502" font-size="15" fill="#0f172a">최신 값을 보관하고</text>
+  <text x="1086" y="524" font-size="15" fill="#0f172a">화면에 제공</text>
+
+  <!-- 5 화면 -->
+  <g filter="url(#sh)">
+    <rect x="1352" y="140" width="276" height="500" rx="20" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+  </g>
+  <rect x="1352" y="140" width="276" height="88" rx="20" fill="#16a34a"/>
+  <rect x="1352" y="196" width="276" height="32" fill="#16a34a"/>
+  <text x="1490" y="176" text-anchor="middle" font-size="15" fill="#dcfce7" font-weight="700">5</text>
+  <text x="1490" y="208" text-anchor="middle" font-size="24" font-weight="800" fill="#ffffff">화면</text>
+  <text x="1490" y="262" text-anchor="middle" font-size="16" fill="#166534">웹 뷰어</text>
+  <text x="1490" y="288" text-anchor="middle" font-size="14" fill="#64748b">사람이 확인하는 곳</text>
+  <rect x="1372" y="318" width="236" height="292" rx="12" fill="#ffffff" stroke="#bbf7d0"/>
+  <text x="1390" y="350" font-size="13" font-weight="800" fill="#15803d">핵심 파이프라인</text>
+  <circle cx="1398" cy="384" r="5" fill="#16a34a"/>
+  <text x="1414" y="390" font-size="15" fill="#0f172a">서버에서 최신 값을</text>
+  <text x="1414" y="412" font-size="15" fill="#0f172a">받아 옴</text>
+  <circle cx="1398" cy="450" r="5" fill="#16a34a"/>
+  <text x="1414" y="456" font-size="15" fill="#0f172a">설비 구조(트리)로 표시</text>
+  <circle cx="1398" cy="496" r="5" fill="#16a34a"/>
+  <text x="1414" y="502" font-size="15" fill="#0f172a">실시간 그래프로</text>
+  <text x="1414" y="524" font-size="15" fill="#0f172a">변화를 보여 줌</text>
+
+  <!-- arrows between cards -->
+  <line x1="316" y1="390" x2="362" y2="390" stroke="#334155" stroke-width="5" marker-end="url(#arr)"/>
+  <line x1="644" y1="390" x2="690" y2="390" stroke="#334155" stroke-width="5" marker-end="url(#arr)"/>
+  <line x1="972" y1="390" x2="1018" y2="390" stroke="#334155" stroke-width="5" marker-end="url(#arr)"/>
+  <line x1="1300" y1="390" x2="1346" y2="390" stroke="#334155" stroke-width="5" marker-end="url(#arr)"/>
+
+  <!-- bottom story -->
+  <rect x="40" y="670" width="1588" height="78" rx="16" fill="#f1f5f9"/>
+  <text x="840" y="704" text-anchor="middle" font-size="15" fill="#64748b">한 줄 요약</text>
+  <text x="840" y="732" text-anchor="middle" font-size="18" fill="#334155">설비에서 값 발생 → 수집기가 읽음 → 중계기가 OPC UA로 맞춤 → AAS가 디지털 정보에 붙임 → 화면에서 봄</text>
+</svg>
+</body>
+</html>

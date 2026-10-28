@@ -133,15 +133,17 @@ window.LiveDashboard = (() => {
   }
 
   function setBadge(online, error) {
-    const badge = $("live-badge");
-    if (!badge) return;
-    if (error) {
-      badge.textContent = "disconnected";
-      badge.className = "status-badge error";
-      return;
+    for (const id of ["live-badge", "live-json-badge"]) {
+      const badge = $(id);
+      if (!badge) continue;
+      if (error) {
+        badge.textContent = "disconnected";
+        badge.className = "status-badge error";
+        continue;
+      }
+      badge.textContent = online ? "online" : "offline";
+      badge.className = online ? "status-badge ok" : "status-badge";
     }
-    badge.textContent = online ? "online" : "offline";
-    badge.className = online ? "status-badge ok" : "status-badge";
   }
 
   function formatJson(frame) {
@@ -169,10 +171,11 @@ window.LiveDashboard = (() => {
     state.hist.push({ t, joint, cart });
     while (state.hist.length && state.hist[0].t < t - MAX_KEEP) state.hist.shift();
     if ($("live-json")) $("live-json").textContent = formatJson(frame);
-    if ($("live-ts")) {
-      $("live-ts").textContent = frame.timestamp
-        ? String(frame.timestamp)
-        : `updated ${new Date().toLocaleTimeString("ko-KR")}`;
+    const ts = frame.timestamp
+      ? String(frame.timestamp)
+      : `updated ${new Date().toLocaleTimeString("ko-KR")}`;
+    for (const id of ["live-ts", "live-json-ts"]) {
+      if ($(id)) $(id).textContent = ts;
     }
     setBadge(Boolean(frame.online), false);
   }
@@ -219,6 +222,42 @@ window.LiveDashboard = (() => {
     redraw();
   }
 
+  function syncJsonButton() {
+    if ($("live-json-btn")) {
+      $("live-json-btn").textContent = isJsonVisible() ? "JSON 닫기" : "실시간 JSON";
+    }
+  }
+
+  function showJson() {
+    const dialog = $("live-json-dialog");
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    syncJsonButton();
+  }
+
+  function hideJson() {
+    const dialog = $("live-json-dialog");
+    if (dialog?.open) dialog.close();
+    syncJsonButton();
+  }
+
+  function isJsonVisible() {
+    return Boolean($("live-json-dialog")?.open);
+  }
+
+  async function copyJson() {
+    const text = $("live-json")?.textContent || "";
+    try {
+      await navigator.clipboard.writeText(text);
+      if ($("live-json-copy")) $("live-json-copy").textContent = "복사됨";
+      setTimeout(() => {
+        if ($("live-json-copy")) $("live-json-copy").textContent = "복사";
+      }, 1200);
+    } catch (_) {
+      if ($("live-json-copy")) $("live-json-copy").textContent = "복사 실패";
+    }
+  }
+
   function init() {
     renderJointChecks();
     renderCartChecks();
@@ -226,6 +265,9 @@ window.LiveDashboard = (() => {
       state.winSec = Number(e.target.value);
       redraw();
     });
+    $("live-json-close")?.addEventListener("click", hideJson);
+    $("live-json-copy")?.addEventListener("click", copyJson);
+    $("live-json-dialog")?.addEventListener("close", syncJsonButton);
   }
 
   function show() {
@@ -234,7 +276,7 @@ window.LiveDashboard = (() => {
     $("live-dash").hidden = false;
     requestAnimationFrame(() => {
       if (!ensureCharts()) {
-        if ($("live-json")) $("live-json").textContent = "Chart.js 를 불러오지 못했습니다. 네트워크를 확인하세요.";
+        if ($("live-ts")) $("live-ts").textContent = "Chart.js 를 불러오지 못했습니다. 네트워크를 확인하세요.";
         return;
       }
       Object.values(charts).forEach((chart) => chart?.resize());
@@ -263,8 +305,11 @@ window.LiveDashboard = (() => {
     init,
     show,
     hide,
+    showJson,
+    hideJson,
     resetHistory,
     ingest,
     isVisible: () => state.visible,
+    isJsonVisible,
   };
 })();

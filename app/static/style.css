@@ -311,7 +311,14 @@ button:disabled:hover { background: #fff; }
 .row:hover { background: #f0f4fa; }
 .row.selected { background: #dbe8fd; }
 
-.caret { width: 14px; text-align: center; color: #6b7785; user-select: none; }
+.caret {
+  width: 16px;
+  flex: 0 0 16px;
+  text-align: center;
+  color: #6b7785;
+  user-select: none;
+  cursor: pointer;
+}
 .caret.leaf { visibility: hidden; }
 li.collapsed > .row .caret::before { content: "▸"; }
 li:not(.collapsed) > .row .caret::before { content: "▾"; }
@@ -433,6 +440,59 @@ li:not(.collapsed) > .row .caret::before { content: "▾"; }
   margin-top: 10px;
 }
 .opcua-write-row input { flex: 1; padding: 6px 8px; border: 1px solid #c4ccd6; border-radius: 4px; }
+.opcua-monitor-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.opcua-monitor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.opcua-monitor-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.opcua-monitor {
+  border: 1px solid #e7ecf2;
+  border-radius: 6px;
+  overflow: auto;
+  max-height: min(420px, 46vh);
+  background: #fbfcfe;
+}
+.opcua-monitor > .muted,
+.opcua-monitor > .error-text {
+  margin: 10px 12px;
+}
+.opcua-monitor table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.opcua-monitor th,
+.opcua-monitor td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef2f6;
+  text-align: left;
+  vertical-align: top;
+}
+.opcua-monitor th {
+  position: sticky;
+  top: 0;
+  background: #f3f6fb;
+  font-weight: 600;
+  z-index: 1;
+}
+.opcua-monitor .value-cell {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.opcua-monitor tr.changed .value-cell { background: #e8f7ee; }
 .status-badge.warn { background: #fff4d6; color: #8a5a00; }
 
 .layout.live-mode {
@@ -474,17 +534,44 @@ li:not(.collapsed) > .row .caret::before { content: "▾"; }
   font: inherit;
   background: #fff;
 }
+.live-json-dialog {
+  border: 1px solid #c4ccd6;
+  border-radius: 10px;
+  padding: 0;
+  width: min(960px, calc(100vw - 32px));
+  height: min(86vh, 920px);
+  max-height: calc(100vh - 32px);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+.live-json-dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
+.live-json-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.live-json-dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e7ecf2;
+  background: #f7f9fc;
+}
+.live-json-dialog h2 { margin: 0; font-size: 16px; }
+.live-json-actions { display: flex; align-items: center; gap: 8px; }
 .live-json {
+  flex: 1;
+  min-height: 0;
   margin: 0;
-  padding: 10px 12px;
+  padding: 16px 18px;
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
   font-family: Consolas, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.45;
-  max-height: 140px;
+  font-size: 13px;
+  line-height: 1.5;
   overflow: auto;
+  white-space: pre;
 }
 .live-charts {
   display: grid;
