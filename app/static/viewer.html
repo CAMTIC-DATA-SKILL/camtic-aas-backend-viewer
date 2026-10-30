@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
   <header class="topbar">
@@ -33,13 +33,22 @@
         <button id="live-btn" type="button">현장 값 불러오기</button>
         <button id="live-view-btn" type="button" class="btn-primary">실시간 그래프</button>
         <button id="live-json-btn" type="button" class="btn-primary">실시간 JSON</button>
+        <select id="download-format" aria-label="다운로드 형식" disabled>
+          <option value="aasx">AASX</option>
+          <option value="json">JSON</option>
+          <option value="xml">XML</option>
+        </select>
+        <button id="download-btn" type="button" disabled>파일 다운로드</button>
+        <button id="upload-files-btn" type="button" disabled>파일 업로드</button>
         <span id="live-status" class="muted"></span>
       </div>
       <div id="tree" class="tree"></div>
     </main>
 
     <aside class="panel detail-panel" id="detail-panel">
-      <h2>상세 정보</h2>
+      <div class="detail-head">
+        <h2>상세 정보</h2>
+      </div>
       <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
     </aside>
 
@@ -90,7 +99,8 @@
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <script src="documentation.js?v=2"></script>
   <script src="live.js?v=8"></script>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

@@ -148,7 +148,7 @@ def _engineering_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> lis
         submodel, _path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
         if submodel in _LIVE_SUBMODELS:
             selected.append(node)
-    return selected or nodes
+    return selected
 
 
 def _package_live_source(
@@ -296,9 +296,11 @@ async def subscribe_engineering(
         package, repository, field_namespace=_field_namespace(session)
     )
     if not node_ids:
-        if source == "engineering" and not nodes:
-            return f"engineering.csv 변수 노드가 없습니다: {package.id}"
-        return f"구독할 NodeId 가 없습니다: {package.id}"
+        logger.info(
+            "OPC-UA 라이브 구독 생략: package=%s (RobotKinematicState/RobotOperationalState 변수 없음)",
+            package.id,
+        )
+        return None
     try:
         await session.ensure_subscribed(node_ids, package_id=package.id)
     except Exception as exc:
@@ -448,25 +450,16 @@ def opcua_package_mapping(
 
 
 @router.get("/packages/{package_id}/live")
-async def opcua_package_live(
+def opcua_package_live(
     package: AasxPackage = Depends(get_package),
     repository: AasxRepository = Depends(get_repository),
     session: OpcUaSession = Depends(get_opcua),
 ) -> dict[str, Any]:
+    """구독 캐시만 읽는다. 웹 뷰어는 이 API로 현장 구독을 걸거나 바꾸지 않는다."""
     field_namespace = _field_namespace(session)
-    _source, nodes, node_ids, aas_id = _package_live_source(
+    _source, nodes, _node_ids, aas_id = _package_live_source(
         package, repository, field_namespace=field_namespace
     )
-    if not node_ids:
-        raise HTTPException(
-            status_code=404,
-            detail="engineering.csv 변수 노드가 없습니다.",
-        )
-    if session.is_connected:
-        try:
-            await session.ensure_subscribed(node_ids, package_id=package.id)
-        except Exception as exc:
-            raise _http_error(exc) from exc
     return engineering_live_response(
         nodes,
         session,

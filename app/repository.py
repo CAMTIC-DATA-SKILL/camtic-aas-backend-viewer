@@ -5,7 +5,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 import pyecma376_2
 from basyx.aas import model
@@ -184,6 +184,31 @@ class AasxRepository:
                 self._packages[candidate] = package
             return package
 
+    def rewrite(self, package: AasxPackage) -> AasxPackage:
+        """메모리의 AAS 객체·첨부 파일을 AASX로 다시 쓰고 패키지를 재로드한다."""
+        with self._lock:
+            return self._rewrite_locked(package)
+
+    def update_and_rewrite(
+        self, package_id: str, mutator: Callable[[AasxPackage], Any]
+    ) -> tuple[AasxPackage, Any]:
+        """잠금 안에서 패키지를 변경한 뒤 AASX를 저장하고 재로드한다."""
+        with self._lock:
+            package = self._packages.get(package_id)
+            if package is None:
+                raise KeyError(package_id)
+            extra = mutator(package)
+            return self._rewrite_locked(package), extra
+
+    def _rewrite_locked(self, package: AasxPackage) -> AasxPackage:
+        current = self._packages.get(package.id)
+        if current is None:
+            raise KeyError(package.id)
+        write_package(package)
+        reloaded = load_package(package.path, package.id)
+        self._packages[package.id] = reloaded
+        return reloaded
+
     def delete(self, package_id: str) -> bool:
         """패키지 AASX 파일과 OPC-UA 산출물 폴더를 삭제하고 메모리에서 제거한다."""
         with self._lock:
@@ -201,6 +226,67 @@ class AasxRepository:
             shutil.rmtree(artifact_dir)
             logger.info("Deleted artifacts directory %s", artifact_dir)
         return True
+
+
+def write_package(package: AasxPackage) -> None:
+    """현재 메모리 상태를 원본 AASX 경로에 원자적으로 덮어쓴다."""
+    target = package.path
+    tmp = target.with_name(f".{target.name}.tmp")
+    try:
+        with aasx.AASXWriter(tmp, failsafe=False) as writer:
+            writer.write_all_aas_objects("/aasx/data.json", package.objects, package.files, write_json=True)
+            _write_thumbnail(writer, package)
+            _write_core_properties(writer, package)
+        tmp.replace(target)
+        logger.info("Rewrote AASX package %s", target)
+    except Exception:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+        raise
+
+
+def _write_thumbnail(writer: aasx.AASXWriter, package: AasxPackage) -> None:
+    if not package.thumbnail:
+        return
+    media = _guess_image_type(package.thumbnail)
+    ext = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "image/svg+xml": ".svg",
+    }.get(media, ".bin")
+    writer.write_thumbnail(f"/thumbnail{ext}", bytearray(package.thumbnail), media)
+
+
+def _write_core_properties(writer: aasx.AASXWriter, package: AasxPackage) -> None:
+    if not package.core_properties:
+        return
+    props = pyecma376_2.OPCCoreProperties()
+    for name, value in package.core_properties.items():
+        if not hasattr(props, name) or value in (None, ""):
+            continue
+        if name in {"created", "modified", "lastPrinted"} and isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value)
+            except ValueError:
+                continue
+        setattr(props, name, value)
+    writer.write_core_properties(props)
+
+
+def _guess_image_type(data: bytes) -> str:
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if data.startswith(b"GIF8"):
+        return "image/gif"
+    if len(data) >= 12 and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data.lstrip().startswith(b"<svg") or b"<svg" in data[:256]:
+        return "image/svg+xml"
+    return "application/octet-stream"
 
 
 def _sanitize_aasx_filename(filename: str) -> str:

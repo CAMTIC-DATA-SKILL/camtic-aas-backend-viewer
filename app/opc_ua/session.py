@@ -155,26 +155,7 @@ class OpcUaSession:
         if not ids:
             raise ValueError("구독할 노드 ID 가 없습니다.")
         async with self._lock:
-            client = self.require_client()
-            await client.unsubscribe_all()
-            self._latest = {}
-            self._subscribed = ids
-            self._desired_node_ids = ids
-            if package_id is not None:
-                self._subscribe_package_id = package_id or None
-            await client.subscribe(ids, self._on_data_change)
-        logger.info(
-            "OPC-UA 토픽 등록: server=%s package=%s count=%d topics=%s",
-            self._catalog_server_id or "-",
-            self._subscribe_package_id or "-",
-            len(ids),
-            ids,
-        )
-        return {
-            "subscribedNodeIds": ids,
-            "subscribePackageId": self._subscribe_package_id,
-            "catalogServerId": self._catalog_server_id,
-        }
+            return await self._subscribe_locked(ids, package_id=package_id)
 
     async def unsubscribe(self) -> dict[str, Any]:
         async with self._lock:
@@ -199,15 +180,43 @@ class OpcUaSession:
         ids = list(dict.fromkeys(node_ids))
         if not ids:
             raise ValueError("구독할 노드 ID 가 없습니다.")
-        if set(ids) <= set(self._subscribed):
-            if package_id is not None:
-                self._subscribe_package_id = package_id or None
-            return {
-                "subscribedNodeIds": list(self._subscribed),
-                "subscribePackageId": self._subscribe_package_id,
-                "catalogServerId": self._catalog_server_id,
-            }
-        return await self.subscribe(ids, package_id=package_id)
+        async with self._lock:
+            if set(ids) <= set(self._subscribed):
+                if package_id is not None:
+                    self._subscribe_package_id = package_id or None
+                return self._subscribe_status()
+            merged = list(dict.fromkeys([*self._subscribed, *ids]))
+            return await self._subscribe_locked(merged, package_id=package_id)
+
+    def _subscribe_status(self) -> dict[str, Any]:
+        return {
+            "subscribedNodeIds": list(self._subscribed),
+            "subscribePackageId": self._subscribe_package_id,
+            "catalogServerId": self._catalog_server_id,
+        }
+
+    async def _subscribe_locked(
+        self,
+        ids: list[str],
+        package_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        client = self.require_client()
+        keep = {node_id: value for node_id, value in self._latest.items() if node_id in ids}
+        await client.unsubscribe_all()
+        self._latest = keep
+        self._subscribed = ids
+        self._desired_node_ids = ids
+        if package_id is not None:
+            self._subscribe_package_id = package_id or None
+        await client.subscribe(ids, self._on_data_change)
+        logger.info(
+            "OPC-UA 토픽 등록: server=%s package=%s count=%d topics=%s",
+            self._catalog_server_id or "-",
+            self._subscribe_package_id or "-",
+            len(ids),
+            ids,
+        )
+        return self._subscribe_status()
 
     def latest_values(self, node_ids: Optional[list[str]] = None) -> list[dict[str, Any]]:
         if node_ids:

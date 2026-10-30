@@ -324,7 +324,10 @@ async function submitUpload() {
     );
     state.selectedId = pkg.id;
     await loadPackages(false);
-    setTimeout(() => $("upload-dialog").close(), 900);
+    $("upload-dialog").close();
+    if (!pkg.error && window.DocumentationUpload) {
+      window.DocumentationUpload.open(pkg.id, { documentation: result.documentation });
+    }
   } catch (e) {
     showUploadStatus(e.message, true);
     $("upload-submit").disabled = false;

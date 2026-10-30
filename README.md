@@ -118,7 +118,7 @@ uvicorn, BaSyx SDK 로그도 같은 형식으로 콘솔과 로그 파일에 함�
 
 PLC 태그처럼 NodeId 자체가 다를 때만 `data/mappings/{package_id}.json` (또는 산출물 폴더의 `mapping.json`)을 씁니다. 유틸리티의 **선택 패키지 AAS 매핑 읽기**는 매핑 파일이 있으면 그 테이블을, 없으면 `engineering.csv` 를 읽습니다.
 
-서버 시작 시 카탈로그 기본 서버에 자동 접속하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 뷰어 **실시간 그래프**는 `GET /api/opcua/packages/{package_id}/live` 로 이 캐시를 읽습니다.
+서버 시작 시 카탈로그 기본 서버에 자동 접속하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 뷰어 **실시간 그래프**는 `GET /api/opcua/packages/{package_id}/live` 로 이 캐시만 읽습니다. 웹 뷰어는 현장 OPC-UA 구독을 걸거나 해제하지 않습니다.
 
 클라이언트 모듈은 `app/opc_ua/client/` 에 있고, HTTP 요청 사이 연결은 `OpcUaSession` 이 유지합니다.
 
@@ -177,7 +177,7 @@ AAS Part 2 API와 동일하게 **base64url 인코딩**해서 전달합니다. �
 | GET | `/api/opcua/values` | 구독으로 수신한 최신 값 |
 | GET | `/api/opcua/packages/{package_id}/nodes` | 산출물 `engineering.csv` 노드 목록 |
 | GET | `/api/opcua/packages/{package_id}/mapping` | AAS Property ↔ 현장 NodeId 매핑 |
-| GET | `/api/opcua/packages/{package_id}/live` | 구독 캐시의 매핑 값 · 그래프 프레임 |
+| GET | `/api/opcua/packages/{package_id}/live` | 구독 캐시의 매핑 값 · 그래프 프레임 (구독 변경 없음) |
 | POST | `/api/opcua/packages/{package_id}/read` | AAS 속성을 현장에서 읽기 (기본 `engineering.csv`, `?source=mapping` 이면 매핑 파일) |
 
 `{aas_id}` 는 목록 API의 `shells[].idBase64`(base64url) 사용을 권장합니다. 슬래시가 없는 URN 원문도 허용합니다.

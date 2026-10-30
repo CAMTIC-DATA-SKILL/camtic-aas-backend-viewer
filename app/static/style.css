@@ -246,6 +246,117 @@ button:disabled:hover { background: #fff; }
 .upload-status { margin: 0; font-size: 13px; }
 .ok-text { color: #1f7a45; }
 
+.doc-upload-dialog { width: min(760px, calc(100vw - 32px)); }
+.doc-upload-dialog form { max-height: calc(100vh - 64px); overflow: auto; }
+.doc-section { display: flex; flex-direction: column; gap: 8px; }
+.doc-section h3 { margin: 0; font-size: 14px; }
+.doc-meta { display: flex; flex-direction: column; gap: 2px; }
+.doc-file-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.doc-file-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid #e7ecf2;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.doc-file-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-kind-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #e8eef6;
+  color: #334155;
+}
+.doc-kind-badge.step { background: #e7f0ff; color: #1554ad; }
+.doc-kind-badge.usd { background: #f3e8ff; color: #6d28d9; }
+.doc-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.doc-plus-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border-color: #1d63c9;
+  background: #eef5ff;
+  color: #1554ad;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 700;
+}
+.doc-plus-btn:hover { background: #dceaff; }
+.doc-entry-list { display: flex; flex-direction: column; gap: 10px; }
+.doc-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.doc-entry-top {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.doc-name-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #5b6775;
+  font-weight: 600;
+}
+.doc-name-field input {
+  padding: 6px 8px;
+  border: 1px solid #c4ccd6;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 500;
+  color: #1f2933;
+}
+.doc-kind-box {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #d7e0ea;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+.doc-kind-box legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+.doc-kind-box label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: #1b2b45;
+  cursor: pointer;
+}
+.doc-entry-drop { min-height: 88px; }
+.doc-slot-label { font-size: 12px; color: #5b6775; word-break: break-all; }
+
+@media (max-width: 720px) {
+  .doc-file-list li { grid-template-columns: auto 1fr auto; }
+  .doc-file-list li .muted:nth-of-type(1) { display: none; }
+}
+
 .layout {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 380px;
@@ -263,6 +374,29 @@ button:disabled:hover { background: #fff; }
   overflow: auto;
 }
 .panel h2 { font-size: 15px; margin: 0 0 10px; }
+
+.detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.detail-head h2 { margin: 0; }
+.detail-download {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.detail-download select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #c4ccd6;
+  border-radius: 4px;
+  background: #fff;
+}
+.detail-download button { white-space: nowrap; }
+.detail-download { flex-wrap: wrap; }
 
 .package-list { list-style: none; margin: 0; padding: 0; }
 .package-list li {
@@ -289,6 +423,12 @@ button:disabled:hover { background: #fff; }
 }
 .tree-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
 .tree-toolbar input { flex: 1; padding: 5px 8px; border: 1px solid #c4ccd6; border-radius: 4px; }
+.tree-toolbar select {
+  padding: 5px 8px;
+  border: 1px solid #c4ccd6;
+  border-radius: 4px;
+  background: #fff;
+}
 .tree {
   flex: 1;
   min-height: 0;

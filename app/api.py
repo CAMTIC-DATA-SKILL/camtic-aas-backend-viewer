@@ -2,14 +2,21 @@ import binascii
 import io
 import json
 import zipfile
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import quote
 
 from basyx.aas import model
 from basyx.aas.adapter.json import AASToJsonEncoder, object_store_to_json
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from basyx.aas.adapter.xml import write_aas_xml_file
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
+from .documentation import (
+    Attachment,
+    apply_attachments,
+    public_file_url,
+    serialize_documentation,
+)
 from .opcua_export import ARTIFACT_NAMES, generate_opcua_artifacts, list_artifacts
 from .repository import AasxPackage, AasxRepository
 from .serializers import TreeBuilder, decode_id, encode_id, package_summary
@@ -137,6 +144,49 @@ def _aas_json(obj: Any) -> Response:
     return Response(content=json.dumps(obj, cls=AASToJsonEncoder), media_type="application/json")
 
 
+def _content_disposition(filename: str) -> dict[str, str]:
+    return {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
+
+
+def _serialize_package(package: AasxPackage, file_format: Literal["aasx", "json", "xml"]) -> Response:
+    if file_format == "aasx":
+        if not package.path.is_file():
+            raise HTTPException(status_code=404, detail="AASX file not found on disk")
+        return FileResponse(
+            path=package.path,
+            media_type="application/asset-administration-shell-package",
+            filename=package.path.name,
+        )
+
+    if package.error:
+        raise HTTPException(
+            status_code=422, detail=f"Package '{package.id}' failed to load: {package.error}"
+        )
+
+    stem = package.path.stem
+    try:
+        if file_format == "json":
+            content = object_store_to_json(package.objects, indent=2, ensure_ascii=False)
+            filename = f"{stem}.json"
+            return Response(
+                content=content.encode("utf-8"),
+                media_type="application/json; charset=utf-8",
+                headers=_content_disposition(filename),
+            )
+        buffer = io.BytesIO()
+        write_aas_xml_file(buffer, package.objects, pretty_print=True)
+        filename = f"{stem}.xml"
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/xml",
+            headers=_content_disposition(filename),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to serialize package as {file_format}: {e}"
+        ) from e
+
+
 def _tree_builder(request: Request, package: AasxPackage) -> TreeBuilder:
     root_path = request.scope.get("root_path", "")
 
@@ -176,6 +226,7 @@ def reload_packages(repository: AasxRepository = Depends(get_repository)) -> lis
 
 @router.post("/packages")
 async def upload_package(
+    request: Request,
     file: UploadFile = File(...),
     repository: AasxRepository = Depends(get_repository),
 ) -> dict[str, Any]:
@@ -207,6 +258,7 @@ async def upload_package(
     return {
         "package": _summary(package, repository),
         "artifacts": artifacts_info,
+        "documentation": _documentation_payload(request, package) if not package.error else None,
     }
 
 
@@ -232,15 +284,12 @@ def delete_package(
 
 
 @router.get("/packages/{package_id}/download")
-def download_package(package: AasxPackage = Depends(get_package)) -> FileResponse:
-    """원본 AASX 패키지 파일을 다운로드한다."""
-    if not package.path.is_file():
-        raise HTTPException(status_code=404, detail="AASX file not found on disk")
-    return FileResponse(
-        path=package.path,
-        media_type="application/asset-administration-shell-package",
-        filename=package.path.name,
-    )
+def download_package(
+    package: AasxPackage = Depends(get_package),
+    file_format: Literal["aasx", "json", "xml"] = Query("aasx", alias="format"),
+) -> Response:
+    """패키지를 AASX, JSON, XML 중 선택한 형식으로 다운로드한다."""
+    return _serialize_package(package, file_format)
 
 
 @router.get("/packages/{package_id}/tree")
@@ -301,6 +350,103 @@ def get_file(file_path: str, package: AasxPackage = Depends(get_loaded_package))
         media_type=content_type or "application/octet-stream",
         headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(file_name)}"},
     )
+
+
+def _documentation_payload(request: Request, package: AasxPackage) -> dict[str, Any]:
+    root_path = request.scope.get("root_path", "")
+
+    def file_url(name: str) -> str:
+        return public_file_url(root_path, package.id, name)
+
+    return serialize_documentation(package, file_url)
+
+
+@router.get("/packages/{package_id}/documentation")
+def get_documentation(
+    request: Request, package: AasxPackage = Depends(get_loaded_package)
+) -> dict[str, Any]:
+    """Documentation Submodel 항목과 첨부 파일 목록을 반환한다."""
+    return _documentation_payload(request, package)
+
+
+@router.post("/packages/{package_id}/documentation/files")
+async def upload_documentation_files(
+    request: Request,
+    package: AasxPackage = Depends(get_loaded_package),
+    repository: AasxRepository = Depends(get_repository),
+    files: Optional[list[UploadFile]] = File(default=None),
+    kinds: Optional[list[str]] = Form(default=None),
+    names: Optional[list[str]] = Form(default=None),
+    step: Optional[UploadFile] = File(default=None),
+    usd: Optional[UploadFile] = File(default=None),
+) -> dict[str, Any]:
+    """Documentation Submodel에 STEP / USD / 기타 DT 모델링 파일을 첨부하고 AASX를 다시 저장한다."""
+    attachments: list[Attachment] = []
+    try:
+        attachments.extend(await _as_named_attachments(files or [], kinds or [], names or []))
+        attachments.extend(await _as_attachments("step", [step] if step else []))
+        attachments.extend(await _as_attachments("usd", [usd] if usd else []))
+        if not attachments:
+            raise ValueError("첨부할 파일이 없습니다.")
+        saved, added = repository.update_and_rewrite(
+            package.id, lambda pkg: apply_attachments(pkg, attachments)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=f"Package '{package.id}' not found") from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to attach documentation files: {e}") from e
+
+    payload = _documentation_payload(request, saved)
+    payload["created"] = added["created"]
+    payload["added"] = added["added"]
+    payload["package"] = _summary(saved, repository)
+    return payload
+
+
+async def _as_named_attachments(
+    uploads: list[UploadFile], kinds: list[str], names: list[str]
+) -> list[Attachment]:
+    attachments: list[Attachment] = []
+    for index, upload in enumerate(uploads):
+        if upload is None or not (upload.filename or "").strip():
+            continue
+        content = await upload.read()
+        if not content:
+            raise ValueError(f"빈 파일은 첨부할 수 없습니다: {upload.filename}")
+        kind = (kinds[index] if index < len(kinds) else "file").strip().lower()
+        if kind not in {"step", "usd", "file"}:
+            raise ValueError(f"알 수 없는 파일 종류입니다: {kind}")
+        attachments.append(
+            Attachment(
+                kind=kind,  # type: ignore[arg-type]
+                filename=upload.filename,
+                content=content,
+                content_type=upload.content_type or "",
+                id_short=names[index] if index < len(names) else "",
+            )
+        )
+    return attachments
+
+
+async def _as_attachments(kind: str, uploads: list[Optional[UploadFile]]) -> list[Attachment]:
+    attachments: list[Attachment] = []
+    for upload in uploads:
+        if upload is None or not (upload.filename or "").strip():
+            continue
+        content = await upload.read()
+        if not content:
+            raise ValueError(f"빈 파일은 첨부할 수 없습니다: {upload.filename}")
+        attachments.append(
+            Attachment(
+                kind=kind,  # type: ignore[arg-type]
+                filename=upload.filename,
+                content=content,
+                content_type=upload.content_type or "",
+            )
+        )
+    return attachments
 
 
 @router.get("/packages/{package_id}/artifacts")

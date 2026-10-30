@@ -28,6 +28,7 @@ const state = {
   selectedNode: null,
   filter: "",
   liveTimer: null,
+  liveGen: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -98,6 +99,7 @@ async function loadPackages(reload = false) {
       el("p", {}, el("a", { href: "/" }, "← 플랫폼으로 이동")),
     );
     $("tree").replaceChildren();
+    updateDownloadControls();
   }
 }
 
@@ -129,6 +131,7 @@ async function selectPackage(packageId) {
   url.searchParams.set("package", packageId);
   window.history.replaceState({}, "", url);
   renderPackageList();
+  updateDownloadControls();
   $("detail").replaceChildren(el("p", { className: "muted" }, "트리에서 항목을 선택하세요."));
 
   const summary = state.packages.find((p) => p.id === packageId);
@@ -469,10 +472,6 @@ function applyLiveValues(values) {
 
   const walk = (node, submodelIdShort) => {
     const sm = node.modelType === "Submodel" ? node.idShort : submodelIdShort;
-    delete node.liveValue;
-    delete node.liveStatus;
-    delete node.liveNodeId;
-    delete node.hasLive;
     const live = byKey.get(`${sm}\n${node.path || ""}`);
     if (live) {
       node.liveValue = live.value;
@@ -480,7 +479,8 @@ function applyLiveValues(values) {
       node.liveNodeId = live.nodeId || null;
       node.chartKey = `${sm}/${node.path}`;
       node.hasLive = true;
-    } else {
+    } else if (!hasLiveValue(node)) {
+      delete node.hasLive;
       delete node.chartKey;
     }
     let childLive = false;
@@ -504,6 +504,7 @@ function setLiveStatus(message, isError = false) {
 }
 
 function stopLiveRefresh() {
+  state.liveGen += 1;
   if (state.liveTimer) {
     clearTimeout(state.liveTimer);
     state.liveTimer = null;
@@ -525,14 +526,20 @@ async function pullLiveFrame() {
 }
 
 function startLiveRefresh() {
-  stopLiveRefresh();
+  const gen = (state.liveGen += 1);
+  if (state.liveTimer) {
+    clearTimeout(state.liveTimer);
+    state.liveTimer = null;
+  }
   const tick = async () => {
-    if (!state.packageId || !state.tree) return;
+    if (state.liveGen !== gen || !state.packageId || !state.tree) return;
     try {
       applyLiveFrame(await pullLiveFrame());
     } catch (e) {
+      if (state.liveGen !== gen) return;
       setLiveStatus(e.message, true);
     }
+    if (state.liveGen !== gen) return;
     state.liveTimer = setTimeout(tick, 500);
   };
   tick();
@@ -602,12 +609,59 @@ if (window.LiveDashboard) {
   LiveDashboard.init();
 }
 
+function selectedPackage() {
+  return state.packages.find((p) => p.id === state.packageId) || null;
+}
+
+function updateDownloadControls() {
+  const pkg = selectedPackage();
+  const formatEl = $("download-format");
+  const buttonEl = $("download-btn");
+  const uploadBtn = $("upload-files-btn");
+  const hasPackage = Boolean(pkg);
+  const loaded = Boolean(pkg && !pkg.error);
+  if (formatEl) formatEl.disabled = !hasPackage;
+  if (buttonEl) buttonEl.disabled = !hasPackage || (!loaded && formatEl?.value !== "aasx");
+  if (uploadBtn) uploadBtn.disabled = !loaded;
+}
+
+function downloadPackage() {
+  const pkg = selectedPackage();
+  if (!pkg) return;
+  const format = $("download-format")?.value || "aasx";
+  if (pkg.error && format !== "aasx") {
+    window.alert("패키지를 로드하지 못해 JSON/XML로 내보낼 수 없습니다.");
+    return;
+  }
+  window.location.href = `${apiBase(pkg.id)}/download?format=${encodeURIComponent(format)}`;
+}
+
+function openDocumentationUpload() {
+  const pkg = selectedPackage();
+  if (!pkg || pkg.error) {
+    window.alert("로드된 AASX 패키지를 선택한 뒤 파일을 업로드하세요.");
+    return;
+  }
+  if (!window.DocumentationUpload) {
+    window.alert("업로드 팝업을 불러오지 못했습니다. 페이지를 새로고침하세요.");
+    return;
+  }
+  window.DocumentationUpload.open(pkg.id, {
+    onSaved: async () => {
+      await selectPackage(pkg.id);
+    },
+  });
+}
+
 $("reload-btn").addEventListener("click", () => loadPackages(true));
 $("expand-btn").addEventListener("click", () => setAllCollapsed(false));
 $("collapse-btn").addEventListener("click", () => setAllCollapsed(true));
 $("live-btn").addEventListener("click", () => tryLoadLiveValues());
 $("live-view-btn").addEventListener("click", () => setLiveView(!window.LiveDashboard?.isVisible()));
 $("live-json-btn").addEventListener("click", () => setLiveJsonView(!window.LiveDashboard?.isJsonVisible()));
+$("download-format").addEventListener("change", updateDownloadControls);
+$("download-btn").addEventListener("click", downloadPackage);
+$("upload-files-btn").addEventListener("click", openDocumentationUpload);
 
 let searchTimer;
 $("search").addEventListener("input", (e) => {

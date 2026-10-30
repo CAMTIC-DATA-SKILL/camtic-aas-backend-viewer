@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from app.opcua_api import _engineering_live_nodes
 from app.opcua_mapping import (
     apply_engineering,
     apply_mapping,
@@ -107,6 +108,37 @@ def test_rewrite_node_id():
     assert rewrite_node_id("ns=1;s=HH7/J1", 2) == "ns=2;s=HH7/J1"
     assert rewrite_node_id("ns=2;i=1145", 2) == "ns=2;i=1145"
     assert rewrite_node_id("ns=1;i=1145", None) == "ns=1;i=1145"
+
+
+def test_engineering_live_nodes_keeps_only_live_submodels():
+    package_id = "HH7_AAS_Template_v0.2"
+    nodes = [
+        {
+            "nodeId": "ns=1;i=1004",
+            "aasPath": f"/{package_id}/HH7/Nameplate/SerialNumber",
+        },
+        {
+            "nodeId": "ns=1;i=1145",
+            "aasPath": f"/{package_id}/HH7/RobotKinematicState/JointPosition/J1",
+        },
+        {
+            "nodeId": "ns=1;i=1178",
+            "aasPath": f"/{package_id}/HH7/RobotOperationalState/ProgramTaskState",
+        },
+    ]
+    selected = _engineering_live_nodes(nodes, package_id)
+    assert [node["nodeId"] for node in selected] == ["ns=1;i=1145", "ns=1;i=1178"]
+
+
+def test_engineering_live_nodes_empty_when_package_has_no_live_submodels():
+    package_id = "PLC_AAS_Template_v0.4 (1)"
+    nodes = [
+        {
+            "nodeId": "ns=1;i=1004",
+            "aasPath": f"/{package_id}/PLC_AAS/AMR/InputAMR/Ready",
+        }
+    ]
+    assert _engineering_live_nodes(nodes, package_id) == []
 
 
 def test_apply_engineering_joins_live_values():
