@@ -16,6 +16,7 @@ from .serializers import encode_id
 
 FileKind = Literal["step", "usd", "file"]
 FileUrlResolver = Callable[[str], str]
+TwinFileStore = Callable[[str, str, bytes], Optional[Path]]
 
 _DOC_ID_SHORTS = {"documentation", "handoverdocumentation"}
 _DOC_SEMANTIC_HINTS = (
@@ -149,7 +150,11 @@ def patch_documentation_slots(package: AasxPackage) -> dict[str, Any]:
     }
 
 
-def apply_attachments(package: AasxPackage, attachments: Iterable[Attachment]) -> dict[str, Any]:
+def apply_attachments(
+    package: AasxPackage,
+    attachments: Iterable[Attachment],
+    store_twin: Optional[TwinFileStore] = None,
+) -> dict[str, Any]:
     items = list(attachments)
     if not items:
         raise ValueError("첨부할 파일이 없습니다.")
@@ -163,7 +168,7 @@ def apply_attachments(package: AasxPackage, attachments: Iterable[Attachment]) -
     patched = _ensure_main_file_slots(submodel)
     added: list[dict[str, Any]] = []
     for item in items:
-        added.append(_attach_one(package, submodel, item))
+        added.append(_attach_one(package, submodel, item, store_twin))
     return {
         "created": created,
         "patched": patched,
@@ -317,7 +322,12 @@ def _ensure_documentation_submodel(package: AasxPackage) -> tuple[model.Submodel
     return submodel, True
 
 
-def _attach_one(package: AasxPackage, submodel: model.Submodel, item: Attachment) -> dict[str, Any]:
+def _attach_one(
+    package: AasxPackage,
+    submodel: model.Submodel,
+    item: Attachment,
+    store_twin: Optional[TwinFileStore] = None,
+) -> dict[str, Any]:
     part_name = package.files.add_file(
         _supplementary_name(item.filename),
         io.BytesIO(item.content),
@@ -325,6 +335,11 @@ def _attach_one(package: AasxPackage, submodel: model.Submodel, item: Attachment
     )
     content_type = package.files.get_content_type(part_name)
     id_short, replaced = _upsert_file_element(submodel, item, part_name, content_type)
+    disk_path = None
+    slot = main_slot_for_name(id_short)
+    if slot is not None and store_twin is not None:
+        stored = store_twin(slot.kind, Path(item.filename).name, item.content)
+        disk_path = str(stored) if stored else None
     return {
         "kind": item.kind,
         "idShort": id_short,
@@ -333,6 +348,7 @@ def _attach_one(package: AasxPackage, submodel: model.Submodel, item: Attachment
         "contentType": content_type,
         "size": len(item.content),
         "replaced": replaced,
+        "diskPath": disk_path,
     }
 
 

@@ -412,7 +412,14 @@ async def upload_documentation_files(
         if not attachments:
             raise ValueError("첨부할 파일이 없습니다.")
         saved, added = repository.update_and_rewrite(
-            package.id, lambda pkg: apply_attachments(pkg, attachments)
+            package.id,
+            lambda pkg: apply_attachments(
+                pkg,
+                attachments,
+                store_twin=lambda kind, filename, content: repository.write_digital_twin_file(
+                    pkg.id, kind, filename, content
+                ),
+            ),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

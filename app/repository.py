@@ -106,18 +106,54 @@ def load_package(path: Path, package_id: str) -> AasxPackage:
 class AasxRepository:
     """지정된 폴더의 모든 ``*.aasx`` 파일을 메모리에 로드하여 보관한다."""
 
-    def __init__(self, data_dir: Path, artifacts_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        data_dir: Path,
+        artifacts_dir: Optional[Path] = None,
+        digital_twin_step_dir: Optional[Path] = None,
+        digital_twin_usd_dir: Optional[Path] = None,
+    ):
         self.data_dir = data_dir
-        self.artifacts_dir = artifacts_dir or (data_dir.parent / "artifacts")
+        parent = data_dir.parent
+        self.artifacts_dir = artifacts_dir or (parent / "artifacts")
+        self.digital_twin_step_dir = digital_twin_step_dir or (parent / "digital_twin_step")
+        self.digital_twin_usd_dir = digital_twin_usd_dir or (parent / "digital_twin_usd")
         self._packages: dict[str, AasxPackage] = {}
         self._lock = threading.Lock()
 
     def artifact_dir(self, package_id: str) -> Path:
         return self.artifacts_dir / package_id
 
+    def digital_twin_dir(self, kind: str, package_id: str) -> Path:
+        if kind == "step":
+            return self.digital_twin_step_dir / package_id
+        if kind == "usd":
+            return self.digital_twin_usd_dir / package_id
+        raise ValueError(f"디지털 트윈 저장 종류가 아닙니다: {kind}")
+
+    def write_digital_twin_file(self, package_id: str, kind: str, filename: str, content: bytes) -> Path:
+        dest_dir = self.digital_twin_dir(kind, package_id)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for old in dest_dir.iterdir():
+            if old.is_file():
+                old.unlink()
+        dest = dest_dir / _safe_disk_name(filename)
+        dest.write_bytes(content)
+        logger.info("Saved digital twin %s file %s", kind, dest)
+        return dest
+
+    def delete_digital_twin_files(self, package_id: str) -> None:
+        for root in (self.digital_twin_step_dir, self.digital_twin_usd_dir):
+            target = root / package_id
+            if target.is_dir():
+                shutil.rmtree(target)
+                logger.info("Deleted digital twin directory %s", target)
+
     def reload(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
+        self.digital_twin_step_dir.mkdir(parents=True, exist_ok=True)
+        self.digital_twin_usd_dir.mkdir(parents=True, exist_ok=True)
         paths = sorted(
             p for p in self.data_dir.iterdir() if p.is_file() and p.suffix.lower() == ".aasx"
         )
@@ -225,6 +261,7 @@ class AasxRepository:
         if artifact_dir.is_dir():
             shutil.rmtree(artifact_dir)
             logger.info("Deleted artifacts directory %s", artifact_dir)
+        self.delete_digital_twin_files(package_id)
         return True
 
 
@@ -287,6 +324,12 @@ def _guess_image_type(data: bytes) -> str:
     if data.lstrip().startswith(b"<svg") or b"<svg" in data[:256]:
         return "image/svg+xml"
     return "application/octet-stream"
+
+
+def _safe_disk_name(filename: str) -> str:
+    name = Path(filename).name
+    cleaned = _SAFE_FILENAME.sub("_", name).strip(" ._")
+    return cleaned or "file.bin"
 
 
 def _sanitize_aasx_filename(filename: str) -> str:

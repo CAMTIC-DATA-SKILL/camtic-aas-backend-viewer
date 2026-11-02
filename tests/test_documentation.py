@@ -209,3 +209,45 @@ def test_patch_renames_step_alias_to_canonical(tmp_path: Path):
     assert items["DigitalTwinUsdModel"]["missing"] is True
     assert "step" not in items
     assert "STEP" not in items
+
+
+def test_main_slot_files_are_copied_to_digital_twin_dirs(tmp_path: Path):
+    repo, package_id = _repo_with_sample(tmp_path)
+    step_dir = tmp_path / "digital_twin_step"
+    usd_dir = tmp_path / "digital_twin_usd"
+    repo.digital_twin_step_dir = step_dir
+    repo.digital_twin_usd_dir = usd_dir
+
+    saved, added = repo.update_and_rewrite(
+        package_id,
+        lambda pkg: apply_attachments(
+            pkg,
+            [
+                Attachment("step", "cell.stp", b"ISO-10303-STEP"),
+                Attachment("usd", "cell.usda", b"#usda 1.0\n"),
+                Attachment("file", "mesh.glb", b"glTF", id_short="Mesh"),
+            ],
+            store_twin=lambda kind, filename, content: repo.write_digital_twin_file(
+                pkg.id, kind, filename, content
+            ),
+        ),
+    )
+    by_id = {item["idShort"]: item for item in added["added"]}
+    assert Path(by_id["DigitalTwinCadModel"]["diskPath"]).read_bytes() == b"ISO-10303-STEP"
+    assert Path(by_id["DigitalTwinUsdModel"]["diskPath"]).read_bytes() == b"#usda 1.0\n"
+    assert by_id["Mesh"]["diskPath"] is None
+    assert (step_dir / saved.id / "cell.stp").is_file()
+    assert (usd_dir / saved.id / "cell.usda").is_file()
+
+    repo.update_and_rewrite(
+        package_id,
+        lambda pkg: apply_attachments(
+            pkg,
+            [Attachment("step", "newer.stp", b"new-step")],
+            store_twin=lambda kind, filename, content: repo.write_digital_twin_file(
+                pkg.id, kind, filename, content
+            ),
+        ),
+    )
+    assert not (step_dir / saved.id / "cell.stp").exists()
+    assert (step_dir / saved.id / "newer.stp").read_bytes() == b"new-step"
