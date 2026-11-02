@@ -66,15 +66,59 @@ def get_package(package_id: str, repository: AasxRepository = Depends(get_reposi
     return package
 
 
+def owns_live_subscription(session: OpcUaSession, package_id: str) -> bool:
+    """LIVE 캐시는 현재 구독 중인 패키지에만 붙인다."""
+    subscribed = (session.subscribe_package_id or "").strip()
+    return bool(subscribed) and subscribed == package_id
+
+
+def _live_mismatch_message(session: OpcUaSession) -> str:
+    subscribed = (session.subscribe_package_id or "").strip()
+    if not subscribed:
+        return "구독 중인 AAS 패키지가 없습니다."
+    return f"LIVE는 '{subscribed}' 구독입니다. 이 패키지 값은 표시하지 않습니다."
+
+
+def empty_live_response(
+    session: OpcUaSession,
+    package_id: str,
+    *,
+    aas_id: str = "",
+    source: str = "engineering",
+) -> dict[str, Any]:
+    return {
+        "packageId": package_id,
+        "source": source,
+        "subscribeMatch": False,
+        "message": _live_mismatch_message(session),
+        "catalogServerId": session.catalog_server_id,
+        "subscribePackageId": session.subscribe_package_id,
+        "subscribedNodeIds": session.subscribed_node_ids,
+        "latestCount": len(session.latest_values()),
+        "values": [],
+        "frame": frame_from_mapping(
+            [],
+            connected=False,
+            package_id=package_id,
+            aas_id=aas_id,
+        ),
+    }
+
+
 def mapping_live_response(
     mapping: AasOpcUaMapping,
     session: OpcUaSession,
     package_id: str,
 ) -> dict[str, Any]:
+    if not owns_live_subscription(session, package_id):
+        payload = empty_live_response(session, package_id, aas_id=mapping.aas_id, source="subscription")
+        payload["mappingSource"] = mapping.source
+        return payload
     mapped = apply_mapping(mapping, session.latest_values())
     return {
         "packageId": package_id,
         "source": "subscription",
+        "subscribeMatch": True,
         "mappingSource": mapping.source,
         "catalogServerId": session.catalog_server_id,
         "subscribePackageId": session.subscribe_package_id,
@@ -97,6 +141,8 @@ def engineering_live_response(
     aas_id: str = "",
     field_namespace: Optional[int] = None,
 ) -> dict[str, Any]:
+    if not owns_live_subscription(session, package_id):
+        return empty_live_response(session, package_id, aas_id=aas_id)
     mapped = apply_engineering(
         nodes,
         session.latest_values(),
@@ -107,6 +153,7 @@ def engineering_live_response(
     return {
         "packageId": package_id,
         "source": "engineering",
+        "subscribeMatch": True,
         "catalogServerId": session.catalog_server_id,
         "subscribePackageId": session.subscribe_package_id,
         "subscribedNodeIds": session.subscribed_node_ids,
@@ -455,7 +502,10 @@ def opcua_package_live(
     repository: AasxRepository = Depends(get_repository),
     session: OpcUaSession = Depends(get_opcua),
 ) -> dict[str, Any]:
-    """구독 캐시만 읽는다. 웹 뷰어는 이 API로 현장 구독을 걸거나 바꾸지 않는다."""
+    """구독 캐시만 읽는다. 웹 뷰어는 이 API로 현장 구독을 걸거나 바꾸지 않는다.
+
+    요청 패키지가 ``subscribePackageId`` 와 다를 때는 캐시를 붙이지 않는다.
+    """
     field_namespace = _field_namespace(session)
     _source, nodes, _node_ids, aas_id = _package_live_source(
         package, repository, field_namespace=field_namespace

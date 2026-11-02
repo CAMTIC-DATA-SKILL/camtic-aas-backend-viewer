@@ -479,9 +479,12 @@ function applyLiveValues(values) {
       node.liveNodeId = live.nodeId || null;
       node.chartKey = `${sm}/${node.path}`;
       node.hasLive = true;
-    } else if (!hasLiveValue(node)) {
-      delete node.hasLive;
+    } else {
+      delete node.liveValue;
+      delete node.liveStatus;
+      delete node.liveNodeId;
       delete node.chartKey;
+      delete node.hasLive;
     }
     let childLive = false;
     for (const child of childrenOf(node)) {
@@ -517,6 +520,10 @@ function applyLiveFrame(result) {
   else renderTree({ preserveOpen: true });
   if (state.selectedNode) renderDetail(state.selectedNode);
   if (result.frame) window.LiveDashboard?.ingest?.(result.frame);
+  if (result.subscribeMatch === false) {
+    setLiveStatus(result.message || "이 패키지는 구독 대상이 아닙니다.");
+    return;
+  }
   const good = (result.values || []).filter((item) => item.usable || item.isGood).length;
   setLiveStatus(`AAS 현장 값 ${good}/${result.values?.length || 0}개`);
 }

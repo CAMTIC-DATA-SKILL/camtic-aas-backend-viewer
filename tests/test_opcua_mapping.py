@@ -30,10 +30,46 @@ def test_as_bool_and_robot_status():
 
 
 def test_load_and_apply_hyundai_mapping(tmp_path: Path):
-    mapping = load_mapping(
-        "Hyundai_HH7_PickPlace_AdsorptionGripper_InstanceAAS_v0.2_fixed (1)",
-        tmp_path,
+    (tmp_path / "mapping.json").write_text(
+        json.dumps(
+            {
+                "packageId": "demo",
+                "aasId": "urn:example:aas:hyundai:hh7:pickplace:01",
+                "bindings": [
+                    {
+                        "id": "power",
+                        "submodelIdShort": "OperationalData",
+                        "path": "ActualDataMonitoring.EquipmentState.PowerYesno",
+                        "nodeId": "ns=2;s=robot.robot-1.S0004",
+                        "transform": "as_bool",
+                    },
+                    {
+                        "id": "operation-type",
+                        "submodelIdShort": "OperationalData",
+                        "path": "ActualDataMonitoring.EquipmentState.OperationType",
+                        "nodeId": "ns=2;s=robot.robot-1.S0041",
+                        "transform": "robot_status",
+                    },
+                    {
+                        "id": "timestamp",
+                        "submodelIdShort": "OperationalData",
+                        "path": "Timestamp",
+                        "transform": "compose_datetime",
+                        "sources": [
+                            {"role": "year", "nodeId": "ns=2;s=robot.robot-1.S0006"},
+                            {"role": "month", "nodeId": "ns=2;s=robot.robot-1.S0008"},
+                            {"role": "day", "nodeId": "ns=2;s=robot.robot-1.S0009"},
+                            {"role": "hour", "nodeId": "ns=2;s=robot.robot-1.S0010"},
+                            {"role": "minute", "nodeId": "ns=2;s=robot.robot-1.S0011"},
+                            {"role": "second", "nodeId": "ns=2;s=robot.robot-1.S0012"},
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
     )
+    mapping = load_mapping("demo", tmp_path)
     assert mapping is not None
     assert len(mapping.bindings) == 3
     assert mapping.required_node_ids() == [
@@ -84,10 +120,7 @@ def test_artifact_override_wins(tmp_path: Path):
         ],
     }
     (tmp_path / "mapping.json").write_text(json.dumps(override), encoding="utf-8")
-    mapping = load_mapping(
-        "Hyundai_HH7_PickPlace_AdsorptionGripper_InstanceAAS_v0.2_fixed (1)",
-        tmp_path,
-    )
+    mapping = load_mapping("demo", tmp_path)
     assert mapping is not None
     assert mapping.bindings[0].node_id == "ns=2;s=demo"
 
@@ -170,3 +203,25 @@ def test_apply_engineering_joins_live_values():
     )
     assert remapped[0]["nodeId"] == "ns=2;i=1008"
     assert remapped[0]["value"] == 7
+
+
+def test_apply_engineering_joins_string_node_ids():
+    package_id = "HH7_AAS_Template_v0.2"
+    node_id = f"ns=1;s={package_id}/HH7/RobotKinematicState/JointPosition/J1"
+    nodes = [
+        {
+            "nodeId": node_id,
+            "browseName": "J1",
+            "displayName": "J1",
+            "aasPath": f"/{package_id}/HH7/RobotKinematicState/JointPosition/J1",
+        }
+    ]
+    mapped = apply_engineering(
+        nodes,
+        [{"nodeId": rewrite_node_id(node_id, 2), "value": -82.4, "status": "Good", "isGood": True}],
+        package_id=package_id,
+        field_namespace=2,
+    )
+    assert mapped[0]["path"] == "JointPosition.J1"
+    assert mapped[0]["nodeId"] == "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J1"
+    assert mapped[0]["value"] == -82.4

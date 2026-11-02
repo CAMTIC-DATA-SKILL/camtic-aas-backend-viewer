@@ -1,7 +1,8 @@
 """AAS Property 경로와 현장 OPC-UA NodeId 를 연결한다.
 
 라이브 구독의 기본 계약은 산출물 `engineering.csv` 이다.
-미들웨어가 같은 식별자(`i=1145` 등)를 올리면 별도 매핑 파일이 필요 없다.
+미들웨어가 같은 식별자(`ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J1` 등)를
+올리면 별도 매핑 파일이 필요 없다.
 현장 네임스페이스만 다르면 catalog 의 `nodeIdNamespace` 로 `ns=1` 을 바꾼다.
 
 PLC 태그처럼 NodeId 자체가 다를 때만 매핑 파일을 쓴다.
