@@ -1,0 +1,8 @@
+{
+  "_comment": "임계값 알람 규칙. node_name 이 match(정규식)와 맞는 노드에 min/max 를 적용한다 (값이 범위를 벗어나면 THRESHOLD). equipment_type 을 비우면 모든 유형. 값은 운영 기준이 정해지면 바꾼다 — 지금 값은 HH7 관절 동작 범위를 넉넉하게 잡은 초기값이다.",
+  "rules": [
+    {"match": "^JointPosition\\.J[1-6]$", "equipment_type": "ROBOT", "min": -360, "max": 360, "severity": "WARNING", "label": "관절 위치 범위"},
+    {"match": "^JointSpeed\\.J[1-6]$", "equipment_type": "ROBOT", "min": -300, "max": 300, "severity": "WARNING", "label": "관절 속도 범위"},
+    {"match": "^TCPSpeed$", "equipment_type": "ROBOT", "min": 0, "max": 2000, "severity": "CRITICAL", "label": "TCP 속도 상한"}
+  ]
+}

@@ -5,7 +5,7 @@
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -115,6 +115,63 @@ class OpcUaConfig:
 
 
 @dataclass(frozen=True)
+class ManufacturingConfig:
+    """기존 운영 TimescaleDB 연결 설정. 개발 DB로 대체 연결하지 않는다."""
+
+    enabled: bool
+    db_host: str
+    db_port: int
+    db_name: str
+    db_user: str
+    db_password: str = field(repr=False)
+    pool_size: int = 5
+    pool_max_overflow: int = 5
+    command_timeout: float = 10.0
+    # 수집 시스템이 POST /api/v1/ingest 할 때 쓰는 키. 비어 있으면 ingest 를 받지 않는다.
+    ingest_api_key: Optional[str] = field(default=None, repr=False)
+    # 설정하면 조회 API 도 X-API-Key 를 요구한다. 비우면 조회는 키 없이 허용 (로컬 바인딩 전제).
+    read_api_key: Optional[str] = field(default=None, repr=False)
+    # 기존 OPC-UA 구독 수신값을 REAL 설비로 기록한다 (구독은 그대로, 리스너만 붙음).
+    record_opcua: bool = False
+    # 시작 시 OPC-UA 자동 접속. 원본 동작(true)이 기본이다. 승인 전 운영 서버에서 실제 접속을 막을 때만 .env 에서 false.
+    auto_connect_opcua: bool = True
+    equipment_id: str = "ROBOT_FIELD_01"
+    # 수신 중단·복구, Bad/Uncertain 품질, 임계값 초과를 alarm_event 에 기록한다.
+    alarms_enabled: bool = False
+
+def load_manufacturing_config() -> ManufacturingConfig:
+    enabled = _bool("MFG_ENABLED", False)
+    cfg = ManufacturingConfig(
+        enabled=enabled,
+        db_host=_str("MFG_DB_HOST", "127.0.0.1"),
+        db_port=_int("MFG_DB_PORT", 25432),
+        db_name=_str("MFG_DB_NAME", "seongjang_testbed"),
+        db_user=_str("MFG_DB_USER", ""),
+        db_password=_str("MFG_DB_PASSWORD", "") if enabled else os.environ.get("MFG_DB_PASSWORD", ""),
+        pool_size=max(1, _int("MFG_DB_POOL_SIZE", 5)),
+        pool_max_overflow=max(0, _int("MFG_DB_POOL_MAX_OVERFLOW", 5)),
+        command_timeout=_float("MFG_DB_COMMAND_TIMEOUT", 10.0),
+        ingest_api_key=_optional_str("MFG_INGEST_API_KEY"),
+        read_api_key=_optional_str("MFG_READ_API_KEY"),
+        record_opcua=_bool("MFG_RECORD_OPCUA", False),
+        auto_connect_opcua=_bool("OPCUA_AUTO_CONNECT", True),
+        equipment_id=_str("MFG_EQUIPMENT_ID", "ROBOT_FIELD_01"),
+        alarms_enabled=_bool("MFG_ALARMS_ENABLED", False),
+    )
+    if enabled and not cfg.db_password:
+        raise RuntimeError("MFG_ENABLED=true 이면 MFG_DB_PASSWORD 가 필요합니다. .env 를 확인하세요.")
+    if enabled and not cfg.db_user:
+        raise RuntimeError("MFG_ENABLED=true 이면 운영 계정 MFG_DB_USER가 필요합니다.")
+    # 이전 개발용 .env가 배포에 섞이면 연결 전에 중단한다. 운영 DB로 자동 대체하지 않는다.
+    if cfg.db_port == 55432 or cfg.db_name == "manufacturing_db":
+        raise RuntimeError(
+            "개발 DB 설정은 더 이상 사용하지 않습니다. .env의 MFG_DB_PORT=25432, "
+            "MFG_DB_NAME=seongjang_testbed 및 운영 DB 계정을 설정하세요."
+        )
+    return cfg
+
+
+@dataclass(frozen=True)
 class Settings:
     aasx_data_dir: Path
     artifacts_dir: Path
@@ -133,6 +190,7 @@ class Settings:
     log_backup_count: int
 
     opcua: OpcUaConfig
+    manufacturing: ManufacturingConfig
 
 
 def load_settings() -> Settings:
@@ -188,6 +246,7 @@ def load_settings() -> Settings:
         log_max_bytes=_int("LOG_MAX_BYTES", 10 * 1024 * 1024),
         log_backup_count=_int("LOG_BACKUP_COUNT", 5),
         opcua=opcua,
+        manufacturing=load_manufacturing_config(),
     )
 
 

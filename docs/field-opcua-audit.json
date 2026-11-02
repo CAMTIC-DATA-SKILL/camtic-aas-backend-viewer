@@ -1,0 +1,2325 @@
+{
+  "endpoint": "opc.tcp://218.158.231.215:24840",
+  "checked_at": "2026-11-02T03:56:05.694207+00:00",
+  "package": "HH7_AAS_Template_v0.2",
+  "nodes": [
+    {
+      "aas_path": "RobotKinematicState/JointPosition.J1",
+      "node_id": "ns=2;i=1145",
+      "aas_data_type": "Double",
+      "unit": "deg",
+      "exists": true,
+      "browse_name": "J1",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-59.4729118347168",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.828523+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointPosition.J2",
+      "node_id": "ns=2;i=1146",
+      "aas_data_type": "Double",
+      "unit": "deg",
+      "exists": true,
+      "browse_name": "J2",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "56.224456787109375",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.828799+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointPosition.J3",
+      "node_id": "ns=2;i=1147",
+      "aas_data_type": "Double",
+      "unit": "deg",
+      "exists": true,
+      "browse_name": "J3",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-12.58154296875",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.828979+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointPosition.J4",
+      "node_id": "ns=2;i=1148",
+      "aas_data_type": "Double",
+      "unit": "deg",
+      "exists": true,
+      "browse_name": "J4",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "0.01992187462747097",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.829170+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointPosition.J5",
+      "node_id": "ns=2;i=1149",
+      "aas_data_type": "Double",
+      "unit": "deg",
+      "exists": true,
+      "browse_name": "J5",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-42.34199523925781",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.829394+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointPosition.J6",
+      "node_id": "ns=2;i=1150",
+      "aas_data_type": "Double",
+      "unit": "deg",
+      "exists": true,
+      "browse_name": "J6",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-0.02666105329990387",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.829581+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/TCPPosition.X",
+      "node_id": "ns=2;i=1152",
+      "aas_data_type": "Double",
+      "unit": "mm",
+      "exists": true,
+      "browse_name": "tcp_x",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "317.70001220703125",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.829766+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/TCPPosition.Y",
+      "node_id": "ns=2;i=1153",
+      "aas_data_type": "Double",
+      "unit": "mm",
+      "exists": true,
+      "browse_name": "tcp_y",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-538.7249755859375",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.829945+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/TCPPosition.Z",
+      "node_id": "ns=2;i=1154",
+      "aas_data_type": "Double",
+      "unit": "mm",
+      "exists": true,
+      "browse_name": "tcp_z",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "434.9960021972656",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.830119+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/TCPOrientation.Component1",
+      "node_id": "ns=2;i=1156",
+      "aas_data_type": "Double",
+      "unit": null,
+      "exists": true,
+      "browse_name": "tcp_rx",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "179.98699951171875",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.830251+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/TCPOrientation.Component2",
+      "node_id": "ns=2;i=1157",
+      "aas_data_type": "Double",
+      "unit": null,
+      "exists": true,
+      "browse_name": "tcp_ry",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "1.3009999990463257",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.830378+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/TCPOrientation.Component3",
+      "node_id": "ns=2;i=1158",
+      "aas_data_type": "Double",
+      "unit": null,
+      "exists": true,
+      "browse_name": "tcp_rz",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "120.53900146484375",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.830502+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointSpeed.J1",
+      "node_id": "ns=2;i=1160",
+      "aas_data_type": "Double",
+      "unit": "deg/s",
+      "exists": true,
+      "browse_name": "J1",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-34.05225372314453",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.830703+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointSpeed.J2",
+      "node_id": "ns=2;i=1161",
+      "aas_data_type": "Double",
+      "unit": "deg/s",
+      "exists": true,
+      "browse_name": "J2",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-2.96136474609375",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.830833+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointSpeed.J3",
+      "node_id": "ns=2;i=1162",
+      "aas_data_type": "Double",
+      "unit": "deg/s",
+      "exists": true,
+      "browse_name": "J3",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "5.66455078125",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.830962+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointSpeed.J4",
+      "node_id": "ns=2;i=1163",
+      "aas_data_type": "Double",
+      "unit": "deg/s",
+      "exists": true,
+      "browse_name": "J4",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-0.0",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.831052+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointSpeed.J5",
+      "node_id": "ns=2;i=1164",
+      "aas_data_type": "Double",
+      "unit": "deg/s",
+      "exists": true,
+      "browse_name": "J5",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "-2.3600006103515625",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.831141+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/JointSpeed.J6",
+      "node_id": "ns=2;i=1165",
+      "aas_data_type": "Double",
+      "unit": "deg/s",
+      "exists": true,
+      "browse_name": "J6",
+      "server_data_type": "Float",
+      "minimum_sampling_interval_ms": 0.0,
+      "access_level": 1,
+      "value": "0.0",
+      "value_status": "Good",
+      "source_ts": "2026-11-02T03:56:06.826000+00:00",
+      "server_ts": "2026-11-02T03:56:06.831230+00:00"
+    },
+    {
+      "aas_path": "RobotKinematicState/TCPSpeed",
+      "node_id": "ns=2;i=1166",
+      "aas_data_type": "Double",
+      "unit": "mm/s",
+      "exists": false,
+      "status": "BadNodeIdUnknown"
+    },
+    {
+      "aas_path": "RobotKinematicState/AxisAcceleration",
+      "node_id": "ns=2;i=1167",
+      "aas_data_type": "Double",
+      "unit": null,
+      "exists": false,
+      "status": "BadNodeIdUnknown"
+    },
+    {
+      "aas_path": "RobotOperationalState/ProgramTaskState",
+      "node_id": "ns=2;i=1178",
+      "aas_data_type": "String",
+      "unit": null,
+      "exists": false,
+      "status": "BadNodeIdUnknown"
+    },
+    {
+      "aas_path": "RobotOperationalState/RobotMode",
+      "node_id": "ns=2;i=1179",
+      "aas_data_type": "String",
+      "unit": null,
+      "exists": false,
+      "status": "BadNodeIdUnknown"
+    },
+    {
+      "aas_path": "RobotOperationalState/SystemStatus",
+      "node_id": "ns=2;i=1180",
+      "aas_data_type": "String",
+      "unit": null,
+      "exists": false,
+      "status": "BadNodeIdUnknown"
+    }
+  ],
+  "namespaces": [
+    "http://opcfoundation.org/UA/",
+    "urn:middleware:edge:forwarder",
+    "urn:middleware:edge:forwarder:tags"
+  ],
+  "browse_search": {},
+  "subscription_app_like": {
+    "requested": {
+      "publishing_ms": 500,
+      "sampling_ms": 100,
+      "queue_size": 0
+    },
+    "revised_publishing_ms": 500.0,
+    "seconds": 20.0,
+    "nodes": {
+      "ns=2;i=1145": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 98,
+        "rate_hz": 4.9,
+        "source_ts_interval": {
+          "n": 97,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_ts_interval": {
+          "n": 97,
+          "median_ms": 200.1,
+          "p05_ms": 199.3,
+          "p95_ms": 205.1,
+          "min_ms": 177.9,
+          "max_ms": 400.5
+        },
+        "client_receive_interval": {
+          "n": 97,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 97,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_minus_source_ms": {
+          "n": 98,
+          "median_ms": 2.6,
+          "p05_ms": 2.1,
+          "p95_ms": 3.0,
+          "min_ms": 1.9,
+          "max_ms": 25.0
+        },
+        "receive_minus_source_ms": {
+          "n": 98,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1146": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 199.2,
+          "p95_ms": 204.9,
+          "min_ms": 177.8,
+          "max_ms": 222.5
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 2.9,
+          "p05_ms": 2.4,
+          "p95_ms": 3.4,
+          "min_ms": 2.0,
+          "max_ms": 25.5
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1147": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 199.2,
+          "p95_ms": 204.9,
+          "min_ms": 177.8,
+          "max_ms": 222.6
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 3.2,
+          "p05_ms": 2.5,
+          "p95_ms": 3.7,
+          "min_ms": 2.1,
+          "max_ms": 25.8
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1148": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 83,
+        "rate_hz": 4.15,
+        "source_ts_interval": {
+          "n": 82,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 800.0
+        },
+        "server_ts_interval": {
+          "n": 82,
+          "median_ms": 200.1,
+          "p05_ms": 199.2,
+          "p95_ms": 400.6,
+          "min_ms": 177.7,
+          "max_ms": 800.5
+        },
+        "client_receive_interval": {
+          "n": 82,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.9,
+          "min_ms": 0.0,
+          "max_ms": 1002.4
+        },
+        "value_change_interval": {
+          "n": 82,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 800.0
+        },
+        "server_minus_source_ms": {
+          "n": 83,
+          "median_ms": 3.4,
+          "p05_ms": 2.8,
+          "p95_ms": 3.9,
+          "min_ms": 2.1,
+          "max_ms": 26.1
+        },
+        "receive_minus_source_ms": {
+          "n": 83,
+          "median_ms": -987.8,
+          "p05_ms": -1191.4,
+          "p95_ms": -710.5,
+          "min_ms": -1194.0,
+          "max_ms": -700.9
+        }
+      },
+      "ns=2;i=1149": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 199.1,
+          "p95_ms": 204.8,
+          "min_ms": 177.7,
+          "max_ms": 222.6
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 3.7,
+          "p05_ms": 2.8,
+          "p95_ms": 4.2,
+          "min_ms": 2.2,
+          "max_ms": 26.4
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1150": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 199.0,
+          "p95_ms": 204.8,
+          "min_ms": 177.6,
+          "max_ms": 222.7
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 3.9,
+          "p05_ms": 3.0,
+          "p95_ms": 4.4,
+          "min_ms": 2.3,
+          "max_ms": 26.7
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1152": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 99,
+        "rate_hz": 4.95,
+        "source_ts_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_ts_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 199.0,
+          "p95_ms": 205.0,
+          "min_ms": 177.6,
+          "max_ms": 400.5
+        },
+        "client_receive_interval": {
+          "n": 98,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_minus_source_ms": {
+          "n": 99,
+          "median_ms": 4.2,
+          "p05_ms": 3.1,
+          "p95_ms": 4.7,
+          "min_ms": 2.3,
+          "max_ms": 26.9
+        },
+        "receive_minus_source_ms": {
+          "n": 99,
+          "median_ms": -917.8,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1153": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 198.9,
+          "p95_ms": 204.8,
+          "min_ms": 177.6,
+          "max_ms": 222.7
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 4.3,
+          "p05_ms": 3.2,
+          "p95_ms": 4.9,
+          "min_ms": 2.4,
+          "max_ms": 27.2
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1154": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.1,
+          "p05_ms": 198.8,
+          "p95_ms": 204.8,
+          "min_ms": 177.5,
+          "max_ms": 222.7
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 4.5,
+          "p05_ms": 3.3,
+          "p95_ms": 5.1,
+          "min_ms": 2.5,
+          "max_ms": 27.4
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1156": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 91,
+        "rate_hz": 4.55,
+        "source_ts_interval": {
+          "n": 90,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 605.0
+        },
+        "server_ts_interval": {
+          "n": 90,
+          "median_ms": 200.1,
+          "p05_ms": 198.7,
+          "p95_ms": 400.0,
+          "min_ms": 177.5,
+          "max_ms": 605.3
+        },
+        "client_receive_interval": {
+          "n": 90,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.3,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 90,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 605.0
+        },
+        "server_minus_source_ms": {
+          "n": 91,
+          "median_ms": 4.6,
+          "p05_ms": 3.5,
+          "p95_ms": 5.2,
+          "min_ms": 2.5,
+          "max_ms": 27.6
+        },
+        "receive_minus_source_ms": {
+          "n": 91,
+          "median_ms": -917.8,
+          "p05_ms": -1192.8,
+          "p95_ms": -709.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1157": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 98,
+        "rate_hz": 4.9,
+        "source_ts_interval": {
+          "n": 97,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_ts_interval": {
+          "n": 97,
+          "median_ms": 200.1,
+          "p05_ms": 198.6,
+          "p95_ms": 205.2,
+          "min_ms": 177.5,
+          "max_ms": 399.8
+        },
+        "client_receive_interval": {
+          "n": 97,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.6,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 97,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_minus_source_ms": {
+          "n": 98,
+          "median_ms": 4.8,
+          "p05_ms": 3.5,
+          "p95_ms": 5.4,
+          "min_ms": 2.6,
+          "max_ms": 27.7
+        },
+        "receive_minus_source_ms": {
+          "n": 98,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1158": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.1,
+          "p05_ms": 198.5,
+          "p95_ms": 204.8,
+          "min_ms": 177.4,
+          "max_ms": 222.7
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.6,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 4.9,
+          "p05_ms": 3.6,
+          "p95_ms": 5.5,
+          "min_ms": 2.7,
+          "max_ms": 27.9
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1160": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 78,
+        "rate_hz": 3.9,
+        "source_ts_interval": {
+          "n": 77,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 2005.0
+        },
+        "server_ts_interval": {
+          "n": 77,
+          "median_ms": 200.2,
+          "p05_ms": 198.6,
+          "p95_ms": 400.1,
+          "min_ms": 177.4,
+          "max_ms": 2004.8
+        },
+        "client_receive_interval": {
+          "n": 77,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 504.9,
+          "min_ms": 0.0,
+          "max_ms": 2004.3
+        },
+        "value_change_interval": {
+          "n": 77,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 2005.0
+        },
+        "server_minus_source_ms": {
+          "n": 78,
+          "median_ms": 5.1,
+          "p05_ms": 3.8,
+          "p95_ms": 5.7,
+          "min_ms": 2.8,
+          "max_ms": 28.1
+        },
+        "receive_minus_source_ms": {
+          "n": 78,
+          "median_ms": -950.9,
+          "p05_ms": -1192.8,
+          "p95_ms": -709.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1161": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 97,
+        "rate_hz": 4.85,
+        "source_ts_interval": {
+          "n": 96,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_ts_interval": {
+          "n": 96,
+          "median_ms": 200.1,
+          "p05_ms": 198.5,
+          "p95_ms": 205.1,
+          "min_ms": 177.4,
+          "max_ms": 404.5
+        },
+        "client_receive_interval": {
+          "n": 96,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.6,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 96,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_minus_source_ms": {
+          "n": 97,
+          "median_ms": 5.2,
+          "p05_ms": 3.9,
+          "p95_ms": 5.9,
+          "min_ms": 2.8,
+          "max_ms": 28.3
+        },
+        "receive_minus_source_ms": {
+          "n": 97,
+          "median_ms": -917.8,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1162": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 96,
+        "rate_hz": 4.8,
+        "source_ts_interval": {
+          "n": 95,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 600.0
+        },
+        "server_ts_interval": {
+          "n": 95,
+          "median_ms": 200.1,
+          "p05_ms": 198.6,
+          "p95_ms": 205.5,
+          "min_ms": 177.4,
+          "max_ms": 599.6
+        },
+        "client_receive_interval": {
+          "n": 95,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.7,
+          "min_ms": 0.0,
+          "max_ms": 996.4
+        },
+        "value_change_interval": {
+          "n": 95,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 600.0
+        },
+        "server_minus_source_ms": {
+          "n": 96,
+          "median_ms": 5.4,
+          "p05_ms": 4.0,
+          "p95_ms": 6.1,
+          "min_ms": 2.9,
+          "max_ms": 28.5
+        },
+        "receive_minus_source_ms": {
+          "n": 96,
+          "median_ms": -950.5,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1163": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 56,
+        "rate_hz": 2.8,
+        "source_ts_interval": {
+          "n": 55,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 605.0,
+          "min_ms": 200.0,
+          "max_ms": 2205.0
+        },
+        "server_ts_interval": {
+          "n": 55,
+          "median_ms": 200.3,
+          "p05_ms": 198.3,
+          "p95_ms": 605.6,
+          "min_ms": 177.4,
+          "max_ms": 2208.6
+        },
+        "client_receive_interval": {
+          "n": 55,
+          "median_ms": 495.8,
+          "p05_ms": 0.0,
+          "p95_ms": 1002.9,
+          "min_ms": 0.0,
+          "max_ms": 2006.9
+        },
+        "value_change_interval": {
+          "n": 55,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 605.0,
+          "min_ms": 200.0,
+          "max_ms": 2205.0
+        },
+        "server_minus_source_ms": {
+          "n": 56,
+          "median_ms": 5.0,
+          "p05_ms": 4.0,
+          "p95_ms": 6.1,
+          "min_ms": 2.9,
+          "max_ms": 28.8
+        },
+        "receive_minus_source_ms": {
+          "n": 56,
+          "median_ms": -907.3,
+          "p05_ms": -1191.4,
+          "p95_ms": -704.0,
+          "min_ms": -1192.8,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1164": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 95,
+        "rate_hz": 4.75,
+        "source_ts_interval": {
+          "n": 94,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_ts_interval": {
+          "n": 94,
+          "median_ms": 200.2,
+          "p05_ms": 198.4,
+          "p95_ms": 223.1,
+          "min_ms": 177.4,
+          "max_ms": 404.5
+        },
+        "client_receive_interval": {
+          "n": 94,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.6,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 94,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_minus_source_ms": {
+          "n": 95,
+          "median_ms": 5.6,
+          "p05_ms": 4.1,
+          "p95_ms": 6.3,
+          "min_ms": 3.0,
+          "max_ms": 28.9
+        },
+        "receive_minus_source_ms": {
+          "n": 95,
+          "median_ms": -983.9,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      },
+      "ns=2;i=1165": {
+        "status": "Good",
+        "revised_sampling_ms": 500.0,
+        "revised_queue_size": 10000,
+        "notifications": 91,
+        "rate_hz": 4.55,
+        "source_ts_interval": {
+          "n": 90,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 401.0
+        },
+        "server_ts_interval": {
+          "n": 90,
+          "median_ms": 200.2,
+          "p05_ms": 198.6,
+          "p95_ms": 399.8,
+          "min_ms": 181.3,
+          "max_ms": 402.3
+        },
+        "client_receive_interval": {
+          "n": 90,
+          "median_ms": 0.0,
+          "p05_ms": 0.0,
+          "p95_ms": 503.6,
+          "min_ms": 0.0,
+          "max_ms": 506.6
+        },
+        "value_change_interval": {
+          "n": 90,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 401.0
+        },
+        "server_minus_source_ms": {
+          "n": 91,
+          "median_ms": 5.6,
+          "p05_ms": 4.2,
+          "p95_ms": 6.3,
+          "min_ms": 3.1,
+          "max_ms": 29.0
+        },
+        "receive_minus_source_ms": {
+          "n": 91,
+          "median_ms": -914.3,
+          "p05_ms": -1192.8,
+          "p95_ms": -705.3,
+          "min_ms": -1198.5,
+          "max_ms": -699.8
+        }
+      }
+    }
+  },
+  "subscription_fast": {
+    "requested": {
+      "publishing_ms": 100,
+      "sampling_ms": 50,
+      "queue_size": 10
+    },
+    "revised_publishing_ms": 100.0,
+    "seconds": 20.0,
+    "nodes": {
+      "ns=2;i=1145": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 99,
+        "rate_hz": 4.95,
+        "source_ts_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_ts_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 198.8,
+          "p95_ms": 205.1,
+          "min_ms": 178.3,
+          "max_ms": 400.4
+        },
+        "client_receive_interval": {
+          "n": 98,
+          "median_ms": 200.1,
+          "p05_ms": 189.7,
+          "p95_ms": 210.3,
+          "min_ms": 0.0,
+          "max_ms": 400.1
+        },
+        "value_change_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_minus_source_ms": {
+          "n": 99,
+          "median_ms": 2.7,
+          "p05_ms": 2.3,
+          "p95_ms": 3.3,
+          "min_ms": 2.0,
+          "max_ms": 24.9
+        },
+        "receive_minus_source_ms": {
+          "n": 99,
+          "median_ms": -1123.8,
+          "p05_ms": -1141.1,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1146": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 101,
+        "rate_hz": 5.05,
+        "source_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 198.7,
+          "p95_ms": 204.9,
+          "min_ms": 178.1,
+          "max_ms": 221.5
+        },
+        "client_receive_interval": {
+          "n": 100,
+          "median_ms": 200.1,
+          "p05_ms": 189.7,
+          "p95_ms": 209.1,
+          "min_ms": 0.0,
+          "max_ms": 215.9
+        },
+        "value_change_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 101,
+          "median_ms": 3.0,
+          "p05_ms": 2.6,
+          "p95_ms": 3.7,
+          "min_ms": 2.3,
+          "max_ms": 25.6
+        },
+        "receive_minus_source_ms": {
+          "n": 101,
+          "median_ms": -1123.8,
+          "p05_ms": -1139.4,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1147": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 101,
+        "rate_hz": 5.05,
+        "source_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 198.5,
+          "p95_ms": 204.8,
+          "min_ms": 178.1,
+          "max_ms": 221.7
+        },
+        "client_receive_interval": {
+          "n": 100,
+          "median_ms": 200.1,
+          "p05_ms": 189.7,
+          "p95_ms": 209.1,
+          "min_ms": 0.0,
+          "max_ms": 215.9
+        },
+        "value_change_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 101,
+          "median_ms": 3.3,
+          "p05_ms": 2.7,
+          "p95_ms": 4.1,
+          "min_ms": 2.4,
+          "max_ms": 26.0
+        },
+        "receive_minus_source_ms": {
+          "n": 101,
+          "median_ms": -1123.8,
+          "p05_ms": -1139.4,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1148": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 81,
+        "rate_hz": 4.05,
+        "source_ts_interval": {
+          "n": 80,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 405.0,
+          "min_ms": 199.0,
+          "max_ms": 800.0
+        },
+        "server_ts_interval": {
+          "n": 80,
+          "median_ms": 200.0,
+          "p05_ms": 198.5,
+          "p95_ms": 405.5,
+          "min_ms": 178.1,
+          "max_ms": 800.1
+        },
+        "client_receive_interval": {
+          "n": 80,
+          "median_ms": 200.5,
+          "p05_ms": 191.7,
+          "p95_ms": 411.0,
+          "min_ms": 188.0,
+          "max_ms": 797.9
+        },
+        "value_change_interval": {
+          "n": 80,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 405.0,
+          "min_ms": 199.0,
+          "max_ms": 800.0
+        },
+        "server_minus_source_ms": {
+          "n": 81,
+          "median_ms": 3.5,
+          "p05_ms": 2.9,
+          "p95_ms": 4.5,
+          "min_ms": 2.6,
+          "max_ms": 26.3
+        },
+        "receive_minus_source_ms": {
+          "n": 81,
+          "median_ms": -1127.6,
+          "p05_ms": -1141.1,
+          "p95_ms": -1112.5,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1149": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 101,
+        "rate_hz": 5.05,
+        "source_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 198.6,
+          "p95_ms": 204.9,
+          "min_ms": 178.1,
+          "max_ms": 221.8
+        },
+        "client_receive_interval": {
+          "n": 100,
+          "median_ms": 200.1,
+          "p05_ms": 189.7,
+          "p95_ms": 209.1,
+          "min_ms": 0.0,
+          "max_ms": 215.9
+        },
+        "value_change_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 101,
+          "median_ms": 3.8,
+          "p05_ms": 3.0,
+          "p95_ms": 4.6,
+          "min_ms": 2.7,
+          "max_ms": 26.5
+        },
+        "receive_minus_source_ms": {
+          "n": 101,
+          "median_ms": -1123.8,
+          "p05_ms": -1139.4,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1150": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 101,
+        "rate_hz": 5.05,
+        "source_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 198.5,
+          "p95_ms": 204.9,
+          "min_ms": 178.1,
+          "max_ms": 221.8
+        },
+        "client_receive_interval": {
+          "n": 100,
+          "median_ms": 200.1,
+          "p05_ms": 189.7,
+          "p95_ms": 209.1,
+          "min_ms": 0.0,
+          "max_ms": 215.9
+        },
+        "value_change_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 101,
+          "median_ms": 4.1,
+          "p05_ms": 3.1,
+          "p95_ms": 4.8,
+          "min_ms": 2.9,
+          "max_ms": 26.8
+        },
+        "receive_minus_source_ms": {
+          "n": 101,
+          "median_ms": -1123.8,
+          "p05_ms": -1139.4,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1152": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 101,
+        "rate_hz": 5.05,
+        "source_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 198.4,
+          "p95_ms": 204.9,
+          "min_ms": 178.1,
+          "max_ms": 221.8
+        },
+        "client_receive_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 189.7,
+          "p95_ms": 209.1,
+          "min_ms": 0.0,
+          "max_ms": 215.9
+        },
+        "value_change_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 101,
+          "median_ms": 4.3,
+          "p05_ms": 3.3,
+          "p95_ms": 5.1,
+          "min_ms": 3.0,
+          "max_ms": 27.0
+        },
+        "receive_minus_source_ms": {
+          "n": 101,
+          "median_ms": -1123.8,
+          "p05_ms": -1139.4,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1153": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 101,
+        "rate_hz": 5.05,
+        "source_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 100,
+          "median_ms": 200.1,
+          "p05_ms": 198.3,
+          "p95_ms": 204.9,
+          "min_ms": 178.1,
+          "max_ms": 221.8
+        },
+        "client_receive_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 189.7,
+          "p95_ms": 209.1,
+          "min_ms": 0.0,
+          "max_ms": 215.9
+        },
+        "value_change_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 101,
+          "median_ms": 4.5,
+          "p05_ms": 3.4,
+          "p95_ms": 5.3,
+          "min_ms": 3.1,
+          "max_ms": 27.2
+        },
+        "receive_minus_source_ms": {
+          "n": 101,
+          "median_ms": -1123.8,
+          "p05_ms": -1139.4,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1154": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 101,
+        "rate_hz": 5.05,
+        "source_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_ts_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 198.3,
+          "p95_ms": 204.9,
+          "min_ms": 178.1,
+          "max_ms": 221.8
+        },
+        "client_receive_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 189.7,
+          "p95_ms": 209.1,
+          "min_ms": 0.0,
+          "max_ms": 215.9
+        },
+        "value_change_interval": {
+          "n": 100,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 205.0
+        },
+        "server_minus_source_ms": {
+          "n": 101,
+          "median_ms": 4.6,
+          "p05_ms": 3.5,
+          "p95_ms": 5.5,
+          "min_ms": 3.2,
+          "max_ms": 27.4
+        },
+        "receive_minus_source_ms": {
+          "n": 101,
+          "median_ms": -1123.8,
+          "p05_ms": -1139.4,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1156": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 93,
+        "rate_hz": 4.65,
+        "source_ts_interval": {
+          "n": 92,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_ts_interval": {
+          "n": 92,
+          "median_ms": 200.1,
+          "p05_ms": 198.3,
+          "p95_ms": 399.8,
+          "min_ms": 178.1,
+          "max_ms": 405.6
+        },
+        "client_receive_interval": {
+          "n": 92,
+          "median_ms": 200.2,
+          "p05_ms": 189.7,
+          "p95_ms": 400.3,
+          "min_ms": 0.0,
+          "max_ms": 411.0
+        },
+        "value_change_interval": {
+          "n": 92,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_minus_source_ms": {
+          "n": 93,
+          "median_ms": 4.8,
+          "p05_ms": 3.6,
+          "p95_ms": 5.8,
+          "min_ms": 3.3,
+          "max_ms": 27.6
+        },
+        "receive_minus_source_ms": {
+          "n": 93,
+          "median_ms": -1123.9,
+          "p05_ms": -1141.1,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1157": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 97,
+        "rate_hz": 4.85,
+        "source_ts_interval": {
+          "n": 96,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_ts_interval": {
+          "n": 96,
+          "median_ms": 200.1,
+          "p05_ms": 198.2,
+          "p95_ms": 205.3,
+          "min_ms": 178.1,
+          "max_ms": 404.9
+        },
+        "client_receive_interval": {
+          "n": 96,
+          "median_ms": 200.1,
+          "p05_ms": 189.7,
+          "p95_ms": 210.6,
+          "min_ms": 0.0,
+          "max_ms": 402.1
+        },
+        "value_change_interval": {
+          "n": 96,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_minus_source_ms": {
+          "n": 97,
+          "median_ms": 5.0,
+          "p05_ms": 3.7,
+          "p95_ms": 5.9,
+          "min_ms": 3.4,
+          "max_ms": 27.8
+        },
+        "receive_minus_source_ms": {
+          "n": 97,
+          "median_ms": -1123.8,
+          "p05_ms": -1141.1,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1158": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 100,
+        "rate_hz": 5.0,
+        "source_ts_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_ts_interval": {
+          "n": 99,
+          "median_ms": 200.1,
+          "p05_ms": 198.2,
+          "p95_ms": 204.9,
+          "min_ms": 178.1,
+          "max_ms": 403.5
+        },
+        "client_receive_interval": {
+          "n": 99,
+          "median_ms": 200.1,
+          "p05_ms": 190.2,
+          "p95_ms": 210.3,
+          "min_ms": 0.0,
+          "max_ms": 387.4
+        },
+        "value_change_interval": {
+          "n": 99,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_minus_source_ms": {
+          "n": 100,
+          "median_ms": 5.1,
+          "p05_ms": 3.7,
+          "p95_ms": 6.1,
+          "min_ms": 3.5,
+          "max_ms": 28.0
+        },
+        "receive_minus_source_ms": {
+          "n": 100,
+          "median_ms": -1123.8,
+          "p05_ms": -1141.1,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1160": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 87,
+        "rate_hz": 4.35,
+        "source_ts_interval": {
+          "n": 86,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 1200.0
+        },
+        "server_ts_interval": {
+          "n": 86,
+          "median_ms": 200.1,
+          "p05_ms": 198.4,
+          "p95_ms": 400.3,
+          "min_ms": 178.0,
+          "max_ms": 1202.5
+        },
+        "client_receive_interval": {
+          "n": 86,
+          "median_ms": 200.3,
+          "p05_ms": 190.2,
+          "p95_ms": 399.9,
+          "min_ms": 0.0,
+          "max_ms": 1207.2
+        },
+        "value_change_interval": {
+          "n": 86,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 1200.0
+        },
+        "server_minus_source_ms": {
+          "n": 87,
+          "median_ms": 5.3,
+          "p05_ms": 3.9,
+          "p95_ms": 6.3,
+          "min_ms": 3.6,
+          "max_ms": 28.4
+        },
+        "receive_minus_source_ms": {
+          "n": 87,
+          "median_ms": -1124.1,
+          "p05_ms": -1141.1,
+          "p95_ms": -1108.4,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1161": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 99,
+        "rate_hz": 4.95,
+        "source_ts_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_ts_interval": {
+          "n": 98,
+          "median_ms": 200.1,
+          "p05_ms": 198.2,
+          "p95_ms": 205.0,
+          "min_ms": 177.9,
+          "max_ms": 400.4
+        },
+        "client_receive_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 190.2,
+          "p95_ms": 210.3,
+          "min_ms": 188.0,
+          "max_ms": 401.0
+        },
+        "value_change_interval": {
+          "n": 98,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_minus_source_ms": {
+          "n": 99,
+          "median_ms": 5.4,
+          "p05_ms": 4.0,
+          "p95_ms": 6.5,
+          "min_ms": 3.7,
+          "max_ms": 28.6
+        },
+        "receive_minus_source_ms": {
+          "n": 99,
+          "median_ms": -1123.8,
+          "p05_ms": -1141.1,
+          "p95_ms": -1111.7,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1162": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 97,
+        "rate_hz": 4.85,
+        "source_ts_interval": {
+          "n": 96,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_ts_interval": {
+          "n": 96,
+          "median_ms": 200.1,
+          "p05_ms": 198.2,
+          "p95_ms": 205.3,
+          "min_ms": 177.9,
+          "max_ms": 400.1
+        },
+        "client_receive_interval": {
+          "n": 96,
+          "median_ms": 200.2,
+          "p05_ms": 190.2,
+          "p95_ms": 210.5,
+          "min_ms": 188.0,
+          "max_ms": 402.4
+        },
+        "value_change_interval": {
+          "n": 96,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 205.0,
+          "min_ms": 199.0,
+          "max_ms": 400.0
+        },
+        "server_minus_source_ms": {
+          "n": 97,
+          "median_ms": 5.6,
+          "p05_ms": 4.1,
+          "p95_ms": 6.6,
+          "min_ms": 3.8,
+          "max_ms": 28.8
+        },
+        "receive_minus_source_ms": {
+          "n": 97,
+          "median_ms": -1123.8,
+          "p05_ms": -1141.1,
+          "p95_ms": -1111.7,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1163": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 64,
+        "rate_hz": 3.2,
+        "source_ts_interval": {
+          "n": 63,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 800.0,
+          "min_ms": 199.0,
+          "max_ms": 1200.0
+        },
+        "server_ts_interval": {
+          "n": 63,
+          "median_ms": 200.4,
+          "p05_ms": 198.2,
+          "p95_ms": 800.0,
+          "min_ms": 197.8,
+          "max_ms": 1201.7
+        },
+        "client_receive_interval": {
+          "n": 63,
+          "median_ms": 201.5,
+          "p05_ms": 193.4,
+          "p95_ms": 799.0,
+          "min_ms": 189.7,
+          "max_ms": 1211.1
+        },
+        "value_change_interval": {
+          "n": 63,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 800.0,
+          "min_ms": 199.0,
+          "max_ms": 1200.0
+        },
+        "server_minus_source_ms": {
+          "n": 64,
+          "median_ms": 5.7,
+          "p05_ms": 4.1,
+          "p95_ms": 6.6,
+          "min_ms": 3.9,
+          "max_ms": 29.0
+        },
+        "receive_minus_source_ms": {
+          "n": 64,
+          "median_ms": -1123.1,
+          "p05_ms": -1141.7,
+          "p95_ms": -1111.7,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1164": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 94,
+        "rate_hz": 4.7,
+        "source_ts_interval": {
+          "n": 93,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_ts_interval": {
+          "n": 93,
+          "median_ms": 200.1,
+          "p05_ms": 198.2,
+          "p95_ms": 399.6,
+          "min_ms": 177.7,
+          "max_ms": 404.9
+        },
+        "client_receive_interval": {
+          "n": 93,
+          "median_ms": 200.2,
+          "p05_ms": 191.7,
+          "p95_ms": 389.1,
+          "min_ms": 189.1,
+          "max_ms": 409.4
+        },
+        "value_change_interval": {
+          "n": 93,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 405.0
+        },
+        "server_minus_source_ms": {
+          "n": 94,
+          "median_ms": 5.8,
+          "p05_ms": 4.2,
+          "p95_ms": 6.9,
+          "min_ms": 4.0,
+          "max_ms": 29.2
+        },
+        "receive_minus_source_ms": {
+          "n": 94,
+          "median_ms": -1123.8,
+          "p05_ms": -1141.1,
+          "p95_ms": -1111.7,
+          "min_ms": -1148.3,
+          "max_ms": -906.9
+        }
+      },
+      "ns=2;i=1165": {
+        "status": "Good",
+        "revised_sampling_ms": 100.0,
+        "revised_queue_size": 10,
+        "notifications": 81,
+        "rate_hz": 4.05,
+        "source_ts_interval": {
+          "n": 80,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 805.0
+        },
+        "server_ts_interval": {
+          "n": 80,
+          "median_ms": 200.3,
+          "p05_ms": 198.2,
+          "p95_ms": 400.4,
+          "min_ms": 197.7,
+          "max_ms": 804.8
+        },
+        "client_receive_interval": {
+          "n": 80,
+          "median_ms": 200.6,
+          "p05_ms": 191.7,
+          "p95_ms": 407.0,
+          "min_ms": 188.0,
+          "max_ms": 800.3
+        },
+        "value_change_interval": {
+          "n": 80,
+          "median_ms": 200.0,
+          "p05_ms": 200.0,
+          "p95_ms": 400.0,
+          "min_ms": 199.0,
+          "max_ms": 805.0
+        },
+        "server_minus_source_ms": {
+          "n": 81,
+          "median_ms": 5.9,
+          "p05_ms": 4.4,
+          "p95_ms": 7.0,
+          "min_ms": 4.1,
+          "max_ms": 8.2
+        },
+        "receive_minus_source_ms": {
+          "n": 81,
+          "median_ms": -1123.9,
+          "p05_ms": -1139.3,
+          "p95_ms": -1112.0,
+          "min_ms": -1143.0,
+          "max_ms": -906.9
+        }
+      }
+    }
+  }
+}

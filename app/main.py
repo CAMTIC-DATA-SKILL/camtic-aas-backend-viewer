@@ -9,6 +9,11 @@ from config import Settings, settings
 from utils.log_setup import LogSetup
 
 from .api import router
+from .manufacturing.alarms import AlarmEngine
+from .manufacturing.api import ManufacturingRuntime, router as manufacturing_router
+from .manufacturing.db import create_engine, create_sessionmaker
+from .manufacturing.ingest import NodeCache
+from .manufacturing.recorder import OpcUaRecorder
 from .opc_ua import OpcUaSession
 from .opcua_api import connect_from_catalog, router as opcua_router
 from .opcua_catalog import load_catalog
@@ -89,9 +94,36 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         logger.info("Digital twin USD directory: %s", app_settings.digital_twin_usd_dir)
         repository.reload()
         _ensure_artifacts(repository)
-        await _startup_opcua(opcua, repository)
-        yield
-        await opcua.disconnect()
+        mfg = app_settings.manufacturing
+        runtime = None
+        if mfg.enabled:
+            # 엔진은 연결을 미리 열지 않는다. DB 가 꺼져 있어도 앱은 뜨고, /api/v1/timeseries 만 503 을 돌려준다.
+            engine = create_engine(mfg)
+            runtime = ManufacturingRuntime(mfg, engine, create_sessionmaker(engine), NodeCache(), opcua=opcua)
+            if mfg.record_opcua:
+                # 기존 구독은 그대로 두고 수신 콜백에 리스너만 붙인다 (REAL 설비로 기록).
+                runtime.recorder = OpcUaRecorder(runtime, lambda: opcua.status().get("endpoint"))
+                opcua.add_listener(runtime.recorder.on_change)
+                runtime.recorder.start()
+            if mfg.alarms_enabled:
+                runtime.alarms = AlarmEngine(runtime)
+                runtime.alarms.start()
+            app.state.manufacturing = runtime
+            logger.info("TimescaleDB: %s:%s/%s (record=%s)", mfg.db_host, mfg.db_port, mfg.db_name, mfg.record_opcua)
+        try:
+            if mfg.auto_connect_opcua:
+                await _startup_opcua(opcua, repository)
+            yield
+        finally:
+            try:
+                if runtime is not None and runtime.alarms is not None:
+                    await runtime.alarms.stop()
+                await opcua.disconnect()
+                if runtime is not None and runtime.recorder is not None:
+                    await runtime.recorder.stop()
+            finally:
+                if runtime is not None:
+                    await runtime.engine.dispose()
 
     app = FastAPI(
         title="CAMTIC AAS Data Platform API",
@@ -100,6 +132,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     )
     app.state.repository = repository
     app.state.opcua = opcua
+    app.state.manufacturing = None
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(app_settings.cors_origins),
@@ -108,6 +141,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     )
     app.include_router(router)
     app.include_router(opcua_router)
+    app.include_router(manufacturing_router)
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="viewer")
     return app
 

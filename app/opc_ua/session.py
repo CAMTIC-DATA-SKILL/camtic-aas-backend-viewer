@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from config import OpcUaConfig, settings
@@ -26,6 +28,11 @@ class OpcUaSession:
         self._catalog_server_id: Optional[str] = None
         self._subscribe_package_id: Optional[str] = None
         self._restore_task: asyncio.Task[None] | None = None
+        # 수신 알림을 _latest 외에 받을 곳 (예: TimescaleDB 기록). 콜백 안에서 오래 걸리면 안 된다.
+        self._listeners: list[Callable[[DataChange, datetime], None]] = []
+
+    def add_listener(self, listener: Callable[[DataChange, datetime], None]) -> None:
+        self._listeners.append(listener)
 
     @property
     def is_connected(self) -> bool:
@@ -233,6 +240,7 @@ class OpcUaSession:
         return payload
 
     async def _on_data_change(self, change: DataChange) -> None:
+        received_at = datetime.now(timezone.utc)
         value = serialize_value(change.value)
         self._latest[change.node_id] = {
             "nodeId": change.node_id,
@@ -248,6 +256,11 @@ class OpcUaSession:
             value,
             change.status,
         )
+        for listener in self._listeners:
+            try:
+                listener(change, received_at)
+            except Exception:
+                logger.exception("수신 리스너 오류 (node=%s)", change.node_id)
 
     async def _attach_client(self, client: OpcUaClient) -> None:
         await client.connect()

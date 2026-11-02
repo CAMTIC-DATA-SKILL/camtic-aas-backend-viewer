@@ -18,8 +18,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# 설정 파일 생성 후 AASX_DATA_DIR 등 수정
-Copy-Item .env.example .env
+# 프로젝트 루트에 .env 파일을 만들고 AASX_DATA_DIR 등을 설정 (필수: AASX_DATA_DIR=data/aasx)
 
 # (선택) 테스트용 샘플 AASX 생성 → AASX_DATA_DIR
 python -m scripts.create_sample_aasx
@@ -134,6 +133,17 @@ PLC 태그처럼 NodeId 자체가 다를 때만 `data/mappings/{package_id}.json
 
 유틸리티 → OPC-UA에서 카탈로그 서버를 고르고 접속한 뒤 사용합니다. 차트는 Chart.js CDN을 쓰므로 브라우저에 인터넷이 필요합니다.
 
+### TimescaleDB 모니터링
+
+기존 운영 DB `127.0.0.1:25432/seongjang_testbed`의 `manufacturing` 스키마를 사용합니다.
+DB 생성·마이그레이션·시드·시뮬레이터는 제공하지 않습니다.
+AAS Viewer 탭에서 설비·노드·최신값·이력(CSV)·SSE·알람·DB 상태를 조회합니다.
+`.env`에 실제 운영 계정과 접속정보를 설정하세요. 기존 `.env` 값이 코드 기본값보다 우선합니다.
+실제 수집 승인 전에는 `MFG_RECORD_OPCUA=false`, `MFG_ALARMS_ENABLED=false`,
+`OPCUA_AUTO_CONNECT=false`로 두고 OPC-UA 연결 API를 호출하지 마세요.
+현장 기록을 켜면 `MFG_EQUIPMENT_ID=ROBOT_FIELD_01`의 활성 노드만 구독·저장합니다.
+읽기 전용 점검: `python -m scripts.mfg_inspect` (앱 시작이나 OPC-UA 연결 없음).
+
 ## API
 
 `{package_id}` 는 AASX 파일명(확장자 제외)입니다. AAS/Submodel/ConceptDescription id 는
@@ -218,7 +228,6 @@ AAS Part 2 API와 동일하게 **base64url 인코딩**해서 전달합니다. �
 
 ```
 config.py          .env / 환경 변수 → settings
-.env.example       .env 템플릿
 utils/
   log_setup.py     공용 로그 설정 (LogSetup)
 app/
@@ -232,12 +241,16 @@ app/
   opcua_api.py     OPC-UA 클라이언트 REST
   live_frame.py    실시간 그래프 프레임 정규화
   opc_ua/          asyncua 클라이언트 래퍼 + 세션 (middleware 형식)
+  manufacturing/   TimescaleDB 저장·조회 (/api/v1/timeseries, 현장 기록, AAS 매핑 조회)
   serializers.py   간소화 트리 변환
-  static/          플랫폼 홈 + HTML 트리 뷰어
+  static/          플랫폼 홈 + HTML 트리 뷰어 (tsdb-monitor.js: TimescaleDB 모니터링 탭)
+sql/               읽기 전용 점검·조회 SQL
 deploy/
   camtic-aas-backend-viewer.service.in  systemd 유닛 템플릿
 scripts/
   create_sample_aasx.py  샘플 AASX 생성 (python -m scripts.create_sample_aasx)
+  mfg_inspect.py         기존 DB 읽기 전용 카탈로그 점검
+  mfg_verify_readonly.py 읽기 전용 DB/API 검증 (requirements-dev 필요)
   install-service.sh     시스템 systemd 등록 (재부팅 자동 기동)
   uninstall-service.sh   서비스 해제
 ```
