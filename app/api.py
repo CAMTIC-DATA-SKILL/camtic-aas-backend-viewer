@@ -14,6 +14,8 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from .documentation import (
     Attachment,
     apply_attachments,
+    documentation_needs_patch,
+    patch_documentation_slots,
     public_file_url,
     serialize_documentation,
 )
@@ -258,7 +260,11 @@ async def upload_package(
     return {
         "package": _summary(package, repository),
         "artifacts": artifacts_info,
-        "documentation": _documentation_payload(request, package) if not package.error else None,
+        "documentation": (
+            _ensured_documentation_payload(request, repository, package)
+            if not package.error
+            else None
+        ),
     }
 
 
@@ -361,12 +367,29 @@ def _documentation_payload(request: Request, package: AasxPackage) -> dict[str, 
     return serialize_documentation(package, file_url)
 
 
+def _ensured_documentation_payload(
+    request: Request, repository: AasxRepository, package: AasxPackage
+) -> dict[str, Any]:
+    extra = {"created": False, "patched": []}
+    if documentation_needs_patch(package):
+        package, extra = repository.update_and_rewrite(package.id, patch_documentation_slots)
+    payload = _documentation_payload(request, package)
+    payload["created"] = bool(extra.get("created"))
+    payload["patched"] = list(extra.get("patched") or [])
+    return payload
+
+
 @router.get("/packages/{package_id}/documentation")
 def get_documentation(
-    request: Request, package: AasxPackage = Depends(get_loaded_package)
+    request: Request,
+    package: AasxPackage = Depends(get_loaded_package),
+    repository: AasxRepository = Depends(get_repository),
 ) -> dict[str, Any]:
-    """Documentation Submodel 항목과 첨부 파일 목록을 반환한다."""
-    return _documentation_payload(request, package)
+    """Documentation Submodel 항목과 첨부 파일 목록을 반환한다.
+
+    메인 CAD/USD File 슬롯이 없으면 SemanticID를 붙인 빈 슬롯으로 패치한 뒤 반환한다.
+    """
+    return _ensured_documentation_payload(request, repository, package)
 
 
 @router.post("/packages/{package_id}/documentation/files")
@@ -400,6 +423,7 @@ async def upload_documentation_files(
 
     payload = _documentation_payload(request, saved)
     payload["created"] = added["created"]
+    payload["patched"] = added.get("patched") or []
     payload["added"] = added["added"]
     payload["package"] = _summary(saved, repository)
     return payload

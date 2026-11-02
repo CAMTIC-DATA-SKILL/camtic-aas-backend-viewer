@@ -27,8 +27,44 @@ _DOC_SEMANTIC_HINTS = (
 )
 _STEP_EXTS = {".stp", ".step"}
 _USD_EXTS = {".usd", ".usda", ".usdc", ".usdz"}
-_STEP_ID_SHORTS = {"step", "stepmodel", "stepfile"}
-_USD_ID_SHORTS = {"usd", "usdmodel", "usdfile"}
+
+
+@dataclass(frozen=True)
+class MainFileSlot:
+    kind: FileKind
+    id_short: str
+    semantic_id: str
+    aliases: frozenset[str]
+    content_type: str
+    display_ko: str
+    display_en: str
+
+    @property
+    def names(self) -> frozenset[str]:
+        return self.aliases | {self.id_short.lower()}
+
+
+MAIN_CAD_SLOT = MainFileSlot(
+    kind="step",
+    id_short="DigitalTwinCadModel",
+    semantic_id="urn:physical-ai:ids/cd/DigitalTwinCadModel/1/0",
+    aliases=frozenset({"step", "stepmodel", "stepfile", "digitaltwincadmodel"}),
+    content_type="application/step",
+    display_ko="디지털 트윈 CAD 모델",
+    display_en="Digital Twin CAD Model",
+)
+MAIN_USD_SLOT = MainFileSlot(
+    kind="usd",
+    id_short="DigitalTwinUsdModel",
+    semantic_id="urn:physical-ai:ids/cd/DigitalTwinUsdModel/1/0",
+    aliases=frozenset({"usd", "usdmodel", "usdfile", "digitaltwinusdmodel"}),
+    content_type="model/vnd.usda+ascii",
+    display_ko="디지털 트윈 USD 모델",
+    display_en="Digital Twin USD Model",
+)
+MAIN_FILE_SLOTS = (MAIN_CAD_SLOT, MAIN_USD_SLOT)
+MAIN_FILE_ID_SHORTS = {slot.id_short for slot in MAIN_FILE_SLOTS}
+MAIN_FILE_SEMANTIC_IDS = {slot.semantic_id: slot for slot in MAIN_FILE_SLOTS}
 _CONTENT_TYPES = {
     ".stp": "application/step",
     ".step": "application/step",
@@ -89,7 +125,27 @@ def serialize_documentation(package: AasxPackage, file_url: FileUrlResolver) -> 
         "packageId": package.id,
         "fileName": package.path.name,
         "created": False,
+        "patched": [],
         "submodels": [_serialize_submodel(package, sm, file_url) for sm in submodels],
+    }
+
+
+def documentation_needs_patch(package: AasxPackage) -> bool:
+    submodels = find_documentation_submodels(package)
+    if not submodels:
+        return True
+    return bool(_missing_main_slot_actions(submodels[0]))
+
+
+def patch_documentation_slots(package: AasxPackage) -> dict[str, Any]:
+    """Documentation Submodel과 메인 CAD/USD File 슬롯을 없으면 만든다."""
+    submodel, created = _ensure_documentation_submodel(package)
+    patched = _ensure_main_file_slots(submodel)
+    return {
+        "created": created,
+        "patched": patched,
+        "submodelId": submodel.id,
+        "submodelIdShort": submodel.id_short,
     }
 
 
@@ -101,13 +157,16 @@ def apply_attachments(package: AasxPackage, attachments: Iterable[Attachment]) -
         if not item.content:
             raise ValueError(f"빈 파일은 첨부할 수 없습니다: {item.filename}")
         _validate_kind(item)
+        _validate_reserved_name(item)
 
     submodel, created = _ensure_documentation_submodel(package)
+    patched = _ensure_main_file_slots(submodel)
     added: list[dict[str, Any]] = []
     for item in items:
         added.append(_attach_one(package, submodel, item))
     return {
         "created": created,
+        "patched": patched,
         "submodelId": submodel.id,
         "submodelIdShort": submodel.id_short,
         "added": added,
@@ -120,6 +179,111 @@ def _validate_kind(item: Attachment) -> None:
         raise ValueError("STEP 규격이 아닙니다. .stp 또는 .step 파일만 첨부할 수 있습니다.")
     if item.kind == "usd" and ext not in _USD_EXTS:
         raise ValueError("USD 규격이 아닙니다. .usd / .usda / .usdc / .usdz 파일만 첨부할 수 있습니다.")
+
+
+def _validate_reserved_name(item: Attachment) -> None:
+    slot = main_slot_for_name(item.id_short)
+    if slot is not None and item.kind != slot.kind:
+        raise ValueError(f"idShort '{slot.id_short}' 는 메인 {slot.display_ko} 전용입니다.")
+
+
+def main_slot_for_name(id_short: str) -> Optional[MainFileSlot]:
+    name = sanitize_id_short(id_short).lower()
+    if not name:
+        return None
+    for slot in MAIN_FILE_SLOTS:
+        if name in slot.names:
+            return slot
+    return None
+
+
+def main_slot_for_semantic(semantic_id: str) -> Optional[MainFileSlot]:
+    return MAIN_FILE_SEMANTIC_IDS.get((semantic_id or "").strip())
+
+
+def main_slot_for_kind(kind: FileKind) -> Optional[MainFileSlot]:
+    for slot in MAIN_FILE_SLOTS:
+        if slot.kind == kind:
+            return slot
+    return None
+
+
+def is_main_file_id_short(id_short: str) -> bool:
+    return main_slot_for_name(id_short) is not None
+
+
+def _missing_main_slot_actions(submodel: model.Submodel) -> list[str]:
+    actions: list[str] = []
+    for slot in MAIN_FILE_SLOTS:
+        current = _find_slot_file(submodel, slot)
+        if current is None:
+            actions.append(slot.id_short)
+        elif _slot_identity_drift(current, slot):
+            actions.append(f"normalize:{current.id_short}->{slot.id_short}")
+    return actions
+
+
+def _find_slot_file(submodel: model.Submodel, slot: MainFileSlot) -> Optional[model.File]:
+    by_semantic = None
+    by_name = None
+    for element in submodel.submodel_element:
+        if not isinstance(element, model.File):
+            continue
+        if _semantic_text(element) == slot.semantic_id:
+            by_semantic = element
+        if (element.id_short or "").lower() in slot.names:
+            by_name = element
+    return by_semantic or by_name
+
+
+def _slot_identity_drift(element: model.File, slot: MainFileSlot) -> bool:
+    return element.id_short != slot.id_short or _semantic_text(element) != slot.semantic_id
+
+
+def _ensure_main_file_slots(submodel: model.Submodel) -> list[str]:
+    patched: list[str] = []
+    for slot in MAIN_FILE_SLOTS:
+        current = _find_slot_file(submodel, slot)
+        if current is None:
+            occupied = submodel.submodel_element.get("id_short", slot.id_short)
+            if occupied is not None and not isinstance(occupied, model.File):
+                continue
+            submodel.submodel_element.add(_new_slot_file(slot))
+            patched.append(slot.id_short)
+            continue
+        if not _slot_identity_drift(current, slot):
+            continue
+        _normalize_slot_file(submodel, current, slot)
+        patched.append(slot.id_short)
+    return patched
+
+
+def _new_slot_file(slot: MainFileSlot, value: Optional[str] = None, content_type: str = "") -> model.File:
+    return model.File(
+        slot.id_short,
+        content_type=content_type or slot.content_type,
+        value=value,
+        semantic_id=_semantic(slot.semantic_id),
+        display_name=_slot_display_name(slot),
+    )
+
+
+def _normalize_slot_file(submodel: model.Submodel, current: model.File, slot: MainFileSlot) -> model.File:
+    if current.id_short == slot.id_short:
+        current.semantic_id = _semantic(slot.semantic_id)
+        if not current.display_name:
+            current.display_name = _slot_display_name(slot)
+        if not current.content_type:
+            current.content_type = slot.content_type
+        return current
+    submodel.submodel_element.remove(current)
+    replacement = _new_slot_file(slot, current.value, current.content_type or slot.content_type)
+    submodel.submodel_element.add(replacement)
+    return replacement
+
+
+def _slot_display_name(slot: MainFileSlot) -> model.MultiLanguageNameType:
+    return model.MultiLanguageNameType({"ko": slot.display_ko, "en": slot.display_en})
 
 
 def _ensure_documentation_submodel(package: AasxPackage) -> tuple[model.Submodel, bool]:
@@ -179,11 +343,14 @@ def _upsert_file_element(
     content_type: str,
 ) -> tuple[str, bool]:
     id_short = _resolve_id_short(submodel, item)
+    slot = main_slot_for_name(id_short)
     existing = submodel.submodel_element.get("id_short", id_short)
     if isinstance(existing, model.File):
         existing.content_type = content_type
         existing.value = part_name
-        existing.display_name = _display_name(item, id_short)
+        existing.display_name = _slot_display_name(slot) if slot else _display_name(item, id_short)
+        if slot is not None:
+            existing.semantic_id = _semantic(slot.semantic_id)
         return id_short, True
     if existing is not None:
         raise ValueError(f"idShort '{id_short}' 는 이미 File이 아닌 항목입니다.")
@@ -192,7 +359,8 @@ def _upsert_file_element(
             id_short,
             content_type=content_type,
             value=part_name,
-            display_name=_display_name(item, id_short),
+            semantic_id=_semantic(slot.semantic_id) if slot else None,
+            display_name=_slot_display_name(slot) if slot else _display_name(item, id_short),
         )
     )
     return id_short, False
@@ -205,13 +373,15 @@ def sanitize_id_short(raw: str) -> str:
 
 def _resolve_id_short(submodel: model.Submodel, item: Attachment) -> str:
     preferred = sanitize_id_short(item.id_short)
+    alias_slot = main_slot_for_name(preferred)
+    if alias_slot is not None:
+        return alias_slot.id_short
     if preferred and preferred[0].isalpha():
         return preferred
+    slot = main_slot_for_kind(item.kind)
+    if slot is not None:
+        return slot.id_short
     used = {el.id_short for el in submodel.submodel_element if el.id_short}
-    if item.kind == "step" and "STEP" not in used:
-        return "STEP"
-    if item.kind == "usd" and "USD" not in used:
-        return "USD"
     stem = sanitize_id_short(Path(item.filename).stem)
     if not stem or not stem[0].isalpha():
         stem = f"File_{stem}" if stem else "File"
@@ -233,15 +403,16 @@ def _display_name(item: Attachment, id_short: str) -> model.MultiLanguageNameTyp
 def _serialize_submodel(
     package: AasxPackage, submodel: model.Submodel, file_url: FileUrlResolver
 ) -> dict[str, Any]:
+    files = [
+        _serialize_file(package, path, element, file_url)
+        for path, element in _iter_files(submodel)
+    ]
     return {
         "id": submodel.id,
         "idBase64": encode_id(submodel.id),
         "idShort": submodel.id_short,
         "semanticId": _semantic_text(submodel) or None,
-        "files": [
-            _serialize_file(package, path, element, file_url)
-            for path, element in _iter_files(submodel)
-        ],
+        "files": _with_main_slots(files),
     }
 
 
@@ -253,8 +424,11 @@ def _serialize_file(
 ) -> dict[str, Any]:
     package_path = element.value or ""
     file_name = package_path.rsplit("/", 1)[-1] if package_path else None
+    id_short = element.id_short or ""
+    semantic_id = _semantic_text(element) or None
+    slot = main_slot_for_semantic(semantic_id or "") or main_slot_for_name(id_short)
     return {
-        "idShort": element.id_short,
+        "idShort": id_short,
         "path": path,
         "kind": _element_kind(element),
         "fileName": file_name,
@@ -262,7 +436,54 @@ def _serialize_file(
         "packagePath": package_path or None,
         "url": file_url(package_path) if package_path else None,
         "size": _file_size(package, package_path),
+        "semanticId": semantic_id,
+        "reserved": slot is not None,
+        "missing": not package_path,
     }
+
+
+def _virtual_slot(slot: MainFileSlot) -> dict[str, Any]:
+    return {
+        "idShort": slot.id_short,
+        "path": slot.id_short,
+        "kind": slot.kind,
+        "fileName": None,
+        "contentType": slot.content_type,
+        "packagePath": None,
+        "url": None,
+        "size": None,
+        "semanticId": slot.semantic_id,
+        "reserved": True,
+        "missing": True,
+    }
+
+
+def _slot_of_serialized(item: dict[str, Any]) -> Optional[MainFileSlot]:
+    return main_slot_for_semantic(str(item.get("semanticId") or "")) or main_slot_for_name(
+        str(item.get("idShort") or "")
+    )
+
+
+def _with_main_slots(files: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    reserved: dict[str, dict[str, Any]] = {}
+    extras: list[dict[str, Any]] = []
+    for item in files:
+        slot = _slot_of_serialized(item)
+        if slot is not None:
+            reserved[slot.id_short] = item
+        else:
+            item["reserved"] = False
+            extras.append(item)
+    ordered: list[dict[str, Any]] = []
+    for slot in MAIN_FILE_SLOTS:
+        item = reserved.get(slot.id_short) or _virtual_slot(slot)
+        item["idShort"] = slot.id_short
+        item["semanticId"] = slot.semantic_id
+        item["reserved"] = True
+        item["missing"] = not item.get("packagePath")
+        ordered.append(item)
+    ordered.extend(extras)
+    return ordered
 
 
 def _iter_files(submodel: model.Submodel) -> list[tuple[str, model.File]]:
@@ -288,11 +509,9 @@ def _iter_files(submodel: model.Submodel) -> list[tuple[str, model.File]]:
 
 
 def _element_kind(element: model.File) -> FileKind:
-    id_short = (element.id_short or "").lower()
-    if id_short in _STEP_ID_SHORTS:
-        return "step"
-    if id_short in _USD_ID_SHORTS:
-        return "usd"
+    slot = main_slot_for_semantic(_semantic_text(element)) or main_slot_for_name(element.id_short or "")
+    if slot is not None:
+        return slot.kind
     return kind_from_filename(element.value or element.id_short or "")
 
 
