@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
   <header class="topbar">
@@ -17,6 +18,11 @@
       <a href="/docs" target="_blank" rel="noopener">API 문서</a>
     </div>
   </header>
+
+  <nav class="view-tabs" role="tablist" aria-label="화면 선택">
+    <button type="button" role="tab" id="tab-aasx" aria-selected="true" aria-controls="layout">AASX Viewer</button>
+    <button type="button" role="tab" id="tab-tsdb" aria-selected="false" aria-controls="tsdb-view">TimescaleDB 모니터링</button>
+  </nav>
 
   <div class="layout" id="layout">
     <aside class="panel packages">
@@ -83,6 +89,114 @@
     </section>
   </div>
 
+  <section class="tsdb-view" id="tsdb-view" hidden>
+    <div id="tsdb-link" class="tsdb-banner"></div>
+    <p id="tsdb-error" class="tsdb-banner error" hidden></p>
+
+    <div class="tsdb-cards" id="tsdb-cards"></div>
+
+    <div class="tsdb-grid">
+      <section class="panel tsdb-panel">
+        <div class="tsdb-head">
+          <h2>실시간 데이터 스트림 <span class="muted" id="stream-meta"></span></h2>
+          <span id="stream-badge" class="status-badge">연결 중</span>
+        </div>
+        <div class="tsdb-controls">
+          <label>출처 <select id="stream-source"><option value="">전체</option><option value="REAL">REAL (현장)</option></select></label>
+          <label>설비 <select id="stream-equipment"><option value="">전체</option></select></label>
+          <label>노드 <select id="stream-node"><option value="">전체</option></select></label>
+          <label>표시 <select id="stream-limit"><option>50</option><option selected>100</option><option>200</option></select></label>
+          <button type="button" id="stream-pause">일시정지</button>
+        </div>
+        <div class="tsdb-table-wrap">
+          <table class="tsdb-table">
+            <thead><tr><th>수신 시각</th><th>설비 ID</th><th>유형</th><th>노드명</th><th>측정값</th><th>단위</th><th>품질</th></tr></thead>
+            <tbody id="stream-body"><tr><td colspan="7" class="muted">데이터를 기다리는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel tsdb-panel">
+        <div class="tsdb-head">
+          <h2>실시간 시계열 그래프 <span class="muted">최근 60초 · 1초마다 갱신</span></h2>
+          <button type="button" id="rt-pause">일시정지</button>
+        </div>
+        <div class="tsdb-controls">
+          <label>설비 <select id="rt-equipment"></select></label>
+        </div>
+        <div class="tsdb-nodepick" id="rt-nodes"></div>
+        <div class="chart-box tsdb-chart"><canvas id="rt-chart"></canvas></div>
+      </section>
+    </div>
+
+    <div class="tsdb-grid">
+      <section class="panel tsdb-panel">
+        <div class="tsdb-head">
+          <h2>알람 <span class="muted">수신 중단·복구, Bad/Uncertain 품질, 임계값 초과 · 2초마다 판정</span></h2>
+          <span id="alarm-badge" class="status-badge">확인 중</span>
+        </div>
+        <div class="tsdb-controls">
+          <label>표시 <select id="alarm-filter"><option value="all">전체 (진행 중 먼저)</option><option value="active">진행 중만</option></select></label>
+        </div>
+        <div class="tsdb-table-wrap tsdb-alarms">
+          <table class="tsdb-table">
+            <thead><tr><th>상태</th><th>심각도</th><th>유형</th><th>설비</th><th>노드</th><th>내용</th><th>발생</th><th>복구</th></tr></thead>
+            <tbody id="alarm-body"><tr><td colspan="8" class="muted">불러오는 중...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel tsdb-panel">
+        <div class="tsdb-head">
+          <h2>노드 상태 <span class="muted">현장 미지원·미수집 노드도 지우지 않고 표시</span></h2>
+          <span class="muted" id="node-meta"></span>
+        </div>
+        <div class="tsdb-controls">
+          <label>설비 <select id="node-equipment"></select></label>
+        </div>
+        <div class="tsdb-table-wrap tsdb-alarms">
+          <table class="tsdb-table">
+            <thead><tr><th>AAS 경로</th><th>NodeId</th><th>타입</th><th>단위</th><th>상태</th><th>최신값</th><th>마지막 수신</th><th>실제 간격</th><th>승인 sampling</th></tr></thead>
+            <tbody id="node-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel tsdb-panel">
+      <div class="tsdb-head"><h2>과거 데이터 조회</h2><span class="muted" id="hist-meta"></span></div>
+      <div class="tsdb-controls">
+        <label>설비 <select id="hist-equipment"></select></label>
+        <label>기간
+          <select id="hist-range">
+            <option value="60">최근 1분</option>
+            <option value="300" selected>최근 5분</option>
+            <option value="3600">최근 1시간</option>
+            <option value="86400">최근 24시간</option>
+            <option value="custom">사용자 지정</option>
+          </select>
+        </label>
+        <span id="hist-custom" hidden>
+          <input type="datetime-local" id="hist-start" step="1"> ~ <input type="datetime-local" id="hist-end" step="1">
+        </span>
+        <button type="button" class="btn-primary" id="hist-run">조회</button>
+        <a id="hist-csv" class="tsdb-link-btn" href="#">CSV 다운로드</a>
+      </div>
+      <div class="tsdb-nodepick" id="hist-nodes"></div>
+      <div class="tsdb-hist">
+        <div class="chart-box tsdb-chart"><canvas id="hist-chart"></canvas></div>
+        <table class="tsdb-table tsdb-stats"><thead><tr><th>노드</th><th>평균</th><th>최솟값</th><th>최댓값</th><th>건수</th></tr></thead><tbody id="hist-stats"></tbody></table>
+      </div>
+    </section>
+
+    <div class="tsdb-grid">
+<section class="panel tsdb-panel">
+        <div class="tsdb-head"><h2>TimescaleDB 상태</h2><span id="db-badge" class="status-badge">확인 중</span></div>
+        <table class="tsdb-kv" id="db-status"></table>
+      </section>
+    </div>
+  </section>
+
   <dialog id="live-json-dialog" class="live-json-dialog">
     <header>
       <div class="live-title">
@@ -102,5 +216,6 @@
   <script src="documentation.js?v=2"></script>
   <script src="live.js?v=8"></script>
   <script src="app.js?v=13"></script>
+  <script src="tsdb-monitor.js?v=9"></script>
 </body>
 </html>

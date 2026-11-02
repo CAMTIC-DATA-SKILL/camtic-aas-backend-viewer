@@ -22,6 +22,8 @@ class DataChange:
     is_good: bool
     source_timestamp: datetime | None
     server_timestamp: datetime | None
+    # OPC-UA StatusCode 원시값 (uint32). 시계열 저장에 그대로 쓴다.
+    status_code: int = 0
 
 
 DataChangeCallback = Callable[[DataChange], Awaitable[None] | None]
@@ -42,6 +44,7 @@ class SubscriptionHandler:
             is_good=data_value.StatusCode.is_good(),
             source_timestamp=data_value.SourceTimestamp,
             server_timestamp=data_value.ServerTimestamp,
+            status_code=int(data_value.StatusCode.value),
         )
         try:
             result = self._callback(change)
