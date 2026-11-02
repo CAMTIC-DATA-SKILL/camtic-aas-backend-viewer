@@ -142,6 +142,25 @@ class AasxRepository:
         logger.info("Saved digital twin %s file %s", kind, dest)
         return dest
 
+    def find_digital_twin_file(self, package_id: str, kind: str) -> Optional[Path]:
+        dest_dir = self.digital_twin_dir(kind, package_id)
+        if not dest_dir.is_dir():
+            return None
+        suffixes = {".stp", ".step"} if kind == "step" else {".usd", ".usda", ".usdc", ".usdz"}
+        matches = sorted(
+            path for path in dest_dir.iterdir() if path.is_file() and path.suffix.lower() in suffixes
+        )
+        return matches[0] if matches else None
+
+    def find_mesh_file(self, package_id: str) -> Optional[Path]:
+        dest_dir = self.digital_twin_dir("step", package_id)
+        if not dest_dir.is_dir():
+            return None
+        matches = sorted(
+            path for path in dest_dir.iterdir() if path.is_file() and path.suffix.lower() == ".glb"
+        )
+        return matches[0] if matches else None
+
     def delete_digital_twin_files(self, package_id: str) -> None:
         for root in (self.digital_twin_step_dir, self.digital_twin_usd_dir):
             target = root / package_id

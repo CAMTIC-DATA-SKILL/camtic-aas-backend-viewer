@@ -559,3 +559,32 @@ def _semantic_text(obj: model.HasSemantics) -> str:
 
 def public_file_url(root_path: str, package_id: str, name: str) -> str:
     return f"{root_path}/api/packages/{quote(package_id, safe='')}/files/{quote(name.lstrip('/'))}"
+
+
+def read_reserved_file(package: AasxPackage, slot: MainFileSlot) -> Optional[tuple[str, bytes]]:
+    """메인 CAD/USD 슬롯에 첨부된 파일 바이트를 읽는다."""
+    for submodel in find_documentation_submodels(package):
+        element = _find_slot_file(submodel, slot)
+        if element is None or not element.value or element.value not in package.files:
+            continue
+        content, _ = package.read_file(element.value)
+        return Path(element.value).name, content
+    return None
+
+
+def read_extra_files(package: AasxPackage, suffixes: set[str]) -> list[tuple[str, bytes]]:
+    """예약 슬롯이 아닌 Documentation 첨부 중 확장자가 일치하는 파일을 읽는다."""
+    wanted = {item.lower() for item in suffixes}
+    found: list[tuple[str, bytes]] = []
+    for submodel in find_documentation_submodels(package):
+        for _, element in _iter_files(submodel):
+            if main_slot_for_semantic(_semantic_text(element)) or main_slot_for_name(element.id_short or ""):
+                continue
+            name = element.value or element.id_short or ""
+            if Path(name).suffix.lower() not in wanted:
+                continue
+            if not element.value or element.value not in package.files:
+                continue
+            content, _ = package.read_file(element.value)
+            found.append((Path(element.value).name, content))
+    return found

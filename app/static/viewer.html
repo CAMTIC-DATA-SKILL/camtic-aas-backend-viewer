@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=22">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
 </head>
 <body>
   <header class="topbar">
@@ -50,6 +51,50 @@
         <h2>상세 정보</h2>
       </div>
       <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
+      <section class="sim-host" id="sim-host">
+        <div class="sim-toolbar">
+          <span id="sim-mode" class="sim-badge">STOP</span>
+          <button type="button" id="sim-live">LIVE</button>
+          <button type="button" id="sim-demo">DEMO</button>
+          <button type="button" id="sim-stop">STOP</button>
+          <button type="button" id="sim-fit">맞춤</button>
+        </div>
+        <div class="sim-viewport" id="sim-viewport">
+          <div id="sim-title" class="sim-title" hidden></div>
+        </div>
+        <details class="sim-drawer">
+          <summary>캘리브레이션 · 매핑</summary>
+          <div class="sim-drawer-body">
+            <div class="sim-field-row">
+              <label>구동 <select id="sim-drive"><option value="joint">Joint</option><option value="auto">자동</option><option value="tcp" selected>TCP IK</option></select></label>
+              <label>TCP 단위 <select id="sim-pos-unit"><option value="mm" selected>mm</option><option value="m">m</option></select></label>
+              <label>관절 단위 <select id="sim-joint-unit"><option value="deg" selected>deg</option><option value="rad">rad</option></select></label>
+            </div>
+            <div class="sim-map-grid" id="sim-map-grid">
+              <label>X <span class="sim-bind" id="sim-bind-X"></span><select id="sim-map-X"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>Y <span class="sim-bind" id="sim-bind-Y"></span><select id="sim-map-Y"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>Z <span class="sim-bind" id="sim-bind-Z"></span><select id="sim-map-Z"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>Rx <span class="sim-bind" id="sim-bind-Rx"></span><select id="sim-map-Rx"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>Ry <span class="sim-bind" id="sim-bind-Ry"></span><select id="sim-map-Ry"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>Rz <span class="sim-bind" id="sim-bind-Rz"></span><select id="sim-map-Rz"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>J1 <span class="sim-bind" id="sim-bind-J1"></span><select id="sim-map-J1"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>J2 <span class="sim-bind" id="sim-bind-J2"></span><select id="sim-map-J2"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>J3 <span class="sim-bind" id="sim-bind-J3"></span><select id="sim-map-J3"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>J4 <span class="sim-bind" id="sim-bind-J4"></span><select id="sim-map-J4"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>J5 <span class="sim-bind" id="sim-bind-J5"></span><select id="sim-map-J5"><option value="auto">AAS 기본 바인딩</option></select></label>
+              <label>J6 <span class="sim-bind" id="sim-bind-J6"></span><select id="sim-map-J6"><option value="auto">AAS 기본 바인딩</option></select></label>
+            </div>
+            <div class="sim-corr" id="sim-corr">
+              <label>J1 <select id="sim-sign-0"><option value="1">+1</option><option value="-1">-1</option></select><input id="sim-zero-0" type="number" step="0.1" value="0" title="제로 보정(도)"></label>
+              <label>J2 <select id="sim-sign-1"><option value="1">+1</option><option value="-1">-1</option></select><input id="sim-zero-1" type="number" step="0.1" value="0" title="제로 보정(도)"></label>
+              <label>J3 <select id="sim-sign-2"><option value="1">+1</option><option value="-1">-1</option></select><input id="sim-zero-2" type="number" step="0.1" value="0" title="제로 보정(도)"></label>
+              <label>J4 <select id="sim-sign-3"><option value="1">+1</option><option value="-1">-1</option></select><input id="sim-zero-3" type="number" step="0.1" value="0" title="제로 보정(도)"></label>
+              <label>J5 <select id="sim-sign-4"><option value="1">+1</option><option value="-1">-1</option></select><input id="sim-zero-4" type="number" step="0.1" value="0" title="제로 보정(도)"></label>
+              <label>J6 <select id="sim-sign-5"><option value="1">+1</option><option value="-1">-1</option></select><input id="sim-zero-5" type="number" step="0.1" value="0" title="제로 보정(도)"></label>
+            </div>
+          </div>
+        </details>
+      </section>
     </aside>
 
     <section class="panel live-dash" id="live-dash" hidden>
@@ -101,6 +146,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <script src="documentation.js?v=4"></script>
   <script src="live.js?v=8"></script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
+  <script type="module" src="sim.js?v=8"></script>
 </body>
 </html>

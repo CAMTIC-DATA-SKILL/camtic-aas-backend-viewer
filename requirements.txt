@@ -4,3 +4,6 @@ uvicorn[standard]>=0.30
 python-dotenv>=1.0
 python-multipart>=0.0.9
 asyncua>=2.0,<3
+numpy>=1.26
+trimesh>=4.4
+cascadio>=0.1.1

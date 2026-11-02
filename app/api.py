@@ -2,6 +2,7 @@ import binascii
 import io
 import json
 import zipfile
+from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import quote
 
@@ -22,6 +23,7 @@ from .documentation import (
 from .opcua_export import ARTIFACT_NAMES, generate_opcua_artifacts, list_artifacts
 from .repository import AasxPackage, AasxRepository
 from .serializers import TreeBuilder, decode_id, encode_id, package_summary
+from .simulation import build_simulation_payload, ensure_package_mesh
 
 router = APIRouter(prefix="/api")
 
@@ -428,12 +430,48 @@ async def upload_documentation_files(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to attach documentation files: {e}") from e
 
+    if any(item.get("kind") == "step" for item in added.get("added") or []):
+        try:
+            ensure_package_mesh(repository, saved)
+        except Exception:
+            pass
+
     payload = _documentation_payload(request, saved)
     payload["created"] = added["created"]
     payload["patched"] = added.get("patched") or []
     payload["added"] = added["added"]
     payload["package"] = _summary(saved, repository)
     return payload
+
+
+@router.get("/packages/{package_id}/simulation")
+def get_simulation(
+    request: Request,
+    package: AasxPackage = Depends(get_loaded_package),
+    repository: AasxRepository = Depends(get_repository),
+) -> dict[str, Any]:
+    """Documentation 메인 STEP과 선택 URDF로 위젯 구동 정보를 반환한다."""
+    root_path = request.scope.get("root_path", "")
+    return build_simulation_payload(package, repository, root_path)
+
+
+@router.get("/packages/{package_id}/simulation/mesh")
+def get_simulation_mesh(
+    package: AasxPackage = Depends(get_loaded_package),
+    repository: AasxRepository = Depends(get_repository),
+) -> FileResponse:
+    """변환된 STEP 메시(GLB)를 반환한다."""
+    info = ensure_package_mesh(repository, package)
+    mesh_path = info.get("meshPath")
+    if mesh_path is None or not Path(mesh_path).is_file():
+        detail = info.get("error") or "변환된 시뮬레이션 메시가 없습니다. Documentation에 STEP을 첨부하세요."
+        raise HTTPException(status_code=404, detail=detail)
+    return FileResponse(
+        path=mesh_path,
+        media_type="model/gltf-binary",
+        filename=Path(mesh_path).name,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def _as_named_attachments(

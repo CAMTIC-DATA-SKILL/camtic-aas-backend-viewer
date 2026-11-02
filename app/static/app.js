@@ -100,6 +100,8 @@ async function loadPackages(reload = false) {
     );
     $("tree").replaceChildren();
     updateDownloadControls();
+    if (window.RobotSim) window.RobotSim.unload();
+    else window.__pendingSimPackage = null;
   }
 }
 
@@ -139,6 +141,8 @@ async function selectPackage(packageId) {
     state.tree = null;
     renderPackageHeader(summary);
     $("tree").replaceChildren(el("p", { className: "error-text" }, summary.error));
+    if (window.RobotSim) window.RobotSim.unload();
+    else window.__pendingSimPackage = null;
     return;
   }
 
@@ -152,6 +156,8 @@ async function selectPackage(packageId) {
   renderPackageHeader(state.tree.package);
   renderTree();
   if (window.LiveDashboard) LiveDashboard.resetHistory();
+  if (window.RobotSim) window.RobotSim.load(packageId);
+  else window.__pendingSimPackage = packageId;
   await tryLoadLiveValues({ silent: true });
   startLiveRefresh();
 }
@@ -520,6 +526,7 @@ function applyLiveFrame(result) {
   else renderTree({ preserveOpen: true });
   if (state.selectedNode) renderDetail(state.selectedNode);
   if (result.frame) window.LiveDashboard?.ingest?.(result.frame);
+  window.RobotSim?.ingest?.(result);
   if (result.subscribeMatch === false) {
     setLiveStatus(result.message || "이 패키지는 구독 대상이 아닙니다.");
     return;
