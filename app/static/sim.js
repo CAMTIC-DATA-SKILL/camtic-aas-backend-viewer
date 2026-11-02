@@ -93,7 +93,7 @@ function ensureScene() {
   scene.background = new THREE.Color("#0d1c2a");
   camera = new THREE.PerspectiveCamera(43, 1, 0.02, 100);
   camera.up.set(0, 0, 1);
-  camera.position.set(1.58, 1.36, 1.32);
+  camera.position.set(1.72, 1.48, 1.32);
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -102,7 +102,7 @@ function ensureScene() {
   renderer.domElement.className = "sim-canvas";
   view.insertBefore(renderer.domElement, view.firstChild);
   controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0.2, 0, 0.57);
+  controls.target.set(0, 0, 0.32);
   controls.enableDamping = true;
   controls.dampingFactor = 0.09;
   scene.add(new THREE.AmbientLight(0xffffff, 0.45));
@@ -208,12 +208,10 @@ function fitCamera() {
   if (!robotRoot || !camera) return;
   robotRoot.updateWorldMatrix(true, true);
   const bounds = new THREE.Box3().setFromObject(robotRoot);
-  if (bounds.isEmpty()) return;
-  const center = bounds.getCenter(new THREE.Vector3());
-  const size = bounds.getSize(new THREE.Vector3());
+  const size = bounds.isEmpty() ? new THREE.Vector3(1, 1, 1) : bounds.getSize(new THREE.Vector3());
   const radius = Math.max(0.44, size.length() * 0.62);
-  controls.target.copy(center);
-  camera.position.copy(center).add(new THREE.Vector3(radius * 1.32, -radius * 1.92, radius * 1.32));
+  controls.target.set(0, 0, 0.32);
+  camera.position.set(radius * 1.48, -radius * 2.15, radius * 1.32);
   camera.updateProjectionMatrix();
   controls.update();
 }
