@@ -170,3 +170,25 @@ def test_apply_engineering_joins_live_values():
     )
     assert remapped[0]["nodeId"] == "ns=2;i=1008"
     assert remapped[0]["value"] == 7
+
+
+def test_apply_engineering_joins_string_node_ids():
+    package_id = "HH7_AAS_Template_v0.2"
+    node_id = f"ns=1;s={package_id}/HH7/RobotKinematicState/JointPosition/J1"
+    nodes = [
+        {
+            "nodeId": node_id,
+            "browseName": "J1",
+            "displayName": "J1",
+            "aasPath": f"/{package_id}/HH7/RobotKinematicState/JointPosition/J1",
+        }
+    ]
+    mapped = apply_engineering(
+        nodes,
+        [{"nodeId": rewrite_node_id(node_id, 2), "value": -82.4, "status": "Good", "isGood": True}],
+        package_id=package_id,
+        field_namespace=2,
+    )
+    assert mapped[0]["path"] == "JointPosition.J1"
+    assert mapped[0]["nodeId"] == "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J1"
+    assert mapped[0]["value"] == -82.4

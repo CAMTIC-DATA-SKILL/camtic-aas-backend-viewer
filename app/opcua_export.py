@@ -77,6 +77,29 @@ def _safe_browse_name(value: Optional[str], fallback: str) -> str:
     return cleaned[:120] or fallback
 
 
+def _path_identifier(aas_path: str) -> str:
+    identifier = (aas_path or "").strip("/")
+    identifier = re.sub(r"[^\w\-./]", "_", identifier, flags=re.UNICODE)
+    identifier = re.sub(r"_+", "_", identifier).strip("._")
+    return identifier or "Node"
+
+
+def _string_node_id(aas_path: str, used: set[str]) -> str:
+    """패키지 AAS 경로로 고유한 `ns=1;s=…` 를 만든다. catalog 가 `ns=1` 만 현장 ns 로 바꾼다."""
+    base = _path_identifier(aas_path)
+    node_id = f"ns=1;s={base}"
+    if node_id not in used:
+        used.add(node_id)
+        return node_id
+    suffix = 2
+    while True:
+        candidate = f"ns=1;s={base}_{suffix}"
+        if candidate not in used:
+            used.add(candidate)
+            return candidate
+        suffix += 1
+
+
 def _namespace_uri(package: AasxPackage) -> str:
     digest = hashlib.sha1(package.id.encode("utf-8")).hexdigest()[:12]
     return f"https://camtic.or.kr/opcua/aas/{package.id}/{digest}"
@@ -132,15 +155,15 @@ def _walk_elements(
     elements: Iterable[model.SubmodelElement],
     parent_node_id: str,
     aas_path: str,
-    start_ns: int,
+    used_ids: set[str],
+    fallback_n: int = 0,
 ) -> tuple[list[_NodeRecord], int]:
     records: list[_NodeRecord] = []
-    ns = start_ns
     for element in elements:
-        ns += 1
-        browse = _safe_browse_name(element.id_short, f"Element_{ns}")
+        fallback_n += 1
+        browse = _safe_browse_name(element.id_short, f"Element_{fallback_n}")
         path = f"{aas_path}/{browse}"
-        node_id = f"ns=1;i={ns}"
+        node_id = _string_node_id(path, used_ids)
         model_type = type(element).__name__
         value, value_type = _property_value(element)
         is_container = isinstance(
@@ -189,15 +212,18 @@ def _walk_elements(
             ):
                 children.extend(variables)
         if children:
-            child_records, ns = _walk_elements(children, node_id, path, ns)
+            child_records, fallback_n = _walk_elements(
+                children, node_id, path, used_ids, fallback_n
+            )
             records.extend(child_records)
-    return records, ns
+    return records, fallback_n
 
 
 def build_node_records(package: AasxPackage) -> list[_NodeRecord]:
     records: list[_NodeRecord] = []
-    ns = 1000
-    root_id = "ns=1;i=1000"
+    used_ids: set[str] = set()
+    root_path = f"/{package.id}"
+    root_id = _string_node_id(root_path, used_ids)
     records.append(
         _NodeRecord(
             node_id=root_id,
@@ -206,7 +232,7 @@ def build_node_records(package: AasxPackage) -> list[_NodeRecord]:
             node_class="Object",
             data_type="",
             parent_node_id="i=85",  # Objects folder
-            aas_path=f"/{package.id}",
+            aas_path=root_path,
             aas_id=package.id,
             model_type="AasxPackage",
             semantic_id="",
@@ -215,11 +241,10 @@ def build_node_records(package: AasxPackage) -> list[_NodeRecord]:
         )
     )
 
-    for shell in package.shells:
-        ns += 1
-        shell_id = f"ns=1;i={ns}"
-        browse = _safe_browse_name(shell.id_short, f"AAS_{ns}")
+    for shell_index, shell in enumerate(package.shells, start=1):
+        browse = _safe_browse_name(shell.id_short, f"AAS_{shell_index}")
         shell_path = f"/{package.id}/{browse}"
+        shell_id = _string_node_id(shell_path, used_ids)
         records.append(
             _NodeRecord(
                 node_id=shell_id,
@@ -236,15 +261,14 @@ def build_node_records(package: AasxPackage) -> list[_NodeRecord]:
                 value_type="",
             )
         )
-        for ref in sorted(shell.submodel, key=lambda r: str(r.key[0].value)):
+        for sm_index, ref in enumerate(sorted(shell.submodel, key=lambda r: str(r.key[0].value)), start=1):
             submodel_id = str(ref.key[0].value)
             submodel = package.get_identifiable(submodel_id, model.Submodel)
             if submodel is None:
                 continue
-            ns += 1
-            sm_node = f"ns=1;i={ns}"
-            sm_browse = _safe_browse_name(submodel.id_short, f"SM_{ns}")
+            sm_browse = _safe_browse_name(submodel.id_short, f"SM_{sm_index}")
             sm_path = f"{shell_path}/{sm_browse}"
+            sm_node = _string_node_id(sm_path, used_ids)
             records.append(
                 _NodeRecord(
                     node_id=sm_node,
@@ -261,7 +285,9 @@ def build_node_records(package: AasxPackage) -> list[_NodeRecord]:
                     value_type="",
                 )
             )
-            child_records, ns = _walk_elements(submodel.submodel_element, sm_node, sm_path, ns)
+            child_records, _fallback = _walk_elements(
+                submodel.submodel_element, sm_node, sm_path, used_ids
+            )
             records.extend(child_records)
     return records
 
@@ -486,7 +512,7 @@ def _build_syscfg(package: AasxPackage, namespace_uri: str, records: list[_NodeR
                 "securityPolicy": "None",
                 "applicationUri": f"urn:camtic:aas:{package.id}",
             },
-            "rootNodeId": records[0].node_id if records else "ns=1;i=1000",
+            "rootNodeId": records[0].node_id if records else "ns=1;s=AASPackage",
             "nodeCount": len(records),
             "variableCount": sum(1 for r in records if r.node_class == "Variable"),
             "objectCount": sum(1 for r in records if r.node_class == "Object"),

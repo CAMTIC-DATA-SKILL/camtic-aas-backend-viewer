@@ -1,0 +1,194 @@
+{
+  "collectors": [
+    {
+      "kind": "robot",
+      "device_key": "robot-1",
+      "aas_id": "urn:physical-ai:aas:hyundai:hh7:template:v0.2",
+      "global_asset_id": "urn:physical-ai:aas:hyundai:hh7:template:v0.2"
+    }
+  ],
+  "tags": [
+    {
+      "tag_id": "1737",
+      "source": { "kind": "robot", "device_key": "robot-1", "addr": "S0041" },
+      "target": {
+        "path": "OperationalData/EquipmentState",
+        "name": "OperationType",
+        "data_type": "String",
+        "description": "robot status (0: stop, 1: run, 2: wait)"
+      }
+    },
+    {
+      "tag_id": "S0006",
+      "source": { "kind": "robot", "device_key": "robot-1", "addr": "S0006" },
+      "target": { "path": "OperationalData/Clock", "name": "Year", "data_type": "UInt16" }
+    },
+    {
+      "tag_id": "S0008",
+      "source": { "kind": "robot", "device_key": "robot-1", "addr": "S0008" },
+      "target": { "path": "OperationalData/Clock", "name": "Month", "data_type": "Byte" }
+    },
+    {
+      "tag_id": "S0009",
+      "source": { "kind": "robot", "device_key": "robot-1", "addr": "S0009" },
+      "target": { "path": "OperationalData/Clock", "name": "Day", "data_type": "Byte" }
+    },
+    {
+      "tag_id": "S0010",
+      "source": { "kind": "robot", "device_key": "robot-1", "addr": "S0010" },
+      "target": { "path": "OperationalData/Clock", "name": "Hour", "data_type": "Byte" }
+    },
+    {
+      "tag_id": "S0011",
+      "source": { "kind": "robot", "device_key": "robot-1", "addr": "S0011" },
+      "target": { "path": "OperationalData/Clock", "name": "Minute", "data_type": "Byte" }
+    },
+    {
+      "tag_id": "S0012",
+      "source": { "kind": "robot", "device_key": "robot-1", "addr": "S0012" },
+      "target": { "path": "OperationalData/Clock", "name": "Second", "data_type": "Byte" }
+    },
+    {
+      "tag_id": "1703",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "hw", "field": "cpu_temperature" },
+      "target": {
+        "path": "OperationalData/EnvironmentData",
+        "name": "MeasurementTemperature",
+        "data_type": "Float"
+      }
+    },
+    {
+      "tag_id": "hw.mainboard_temperature",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "hw", "field": "mainboard_temperature" },
+      "target": { "path": "OperationalData/EnvironmentData", "name": "MainboardTemperature", "data_type": "Float" }
+    },
+    {
+      "tag_id": "hw.systemboard_temperature",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "hw", "field": "systemboard_temperature" },
+      "target": { "path": "OperationalData/EnvironmentData", "name": "SystemboardTemperature", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jp1.value_0",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J1",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jp1", "field": "value_0" },
+      "target": { "path": "RobotKinematicState/JointPosition", "name": "J1", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jp1.value_1",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J2",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jp1", "field": "value_1" },
+      "target": { "path": "RobotKinematicState/JointPosition", "name": "J2", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jp1.value_2",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J3",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jp1", "field": "value_2" },
+      "target": { "path": "RobotKinematicState/JointPosition", "name": "J3", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jp2.value_0",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J4",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jp2", "field": "value_0" },
+      "target": { "path": "RobotKinematicState/JointPosition", "name": "J4", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jp2.value_1",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J5",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jp2", "field": "value_1" },
+      "target": { "path": "RobotKinematicState/JointPosition", "name": "J5", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jp2.value_2",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointPosition/J6",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jp2", "field": "value_2" },
+      "target": { "path": "RobotKinematicState/JointPosition", "name": "J6", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv1.value_0",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointSpeed/J1",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv1", "field": "value_0" },
+      "target": { "path": "RobotKinematicState/JointSpeed", "name": "J1", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv1.value_1",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointSpeed/J2",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv1", "field": "value_1" },
+      "target": { "path": "RobotKinematicState/JointSpeed", "name": "J2", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv1.value_2",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointSpeed/J3",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv1", "field": "value_2" },
+      "target": { "path": "RobotKinematicState/JointSpeed", "name": "J3", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv2.value_0",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointSpeed/J4",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv2", "field": "value_0" },
+      "target": { "path": "RobotKinematicState/JointSpeed", "name": "J4", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv2.value_1",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointSpeed/J5",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv2", "field": "value_1" },
+      "target": { "path": "RobotKinematicState/JointSpeed", "name": "J5", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv2.value_2",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/JointSpeed/J6",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv2", "field": "value_2" },
+      "target": { "path": "RobotKinematicState/JointSpeed", "name": "J6", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tcp.value_0",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/TCPPosition/X",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_pos1", "field": "value_0" },
+      "target": { "path": "RobotKinematicState/TCPPosition", "name": "X", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tcp.value_1",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/TCPPosition/Y",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_pos1", "field": "value_1" },
+      "target": { "path": "RobotKinematicState/TCPPosition", "name": "Y", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tcp.value_2",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/TCPPosition/Z",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_pos1", "field": "value_2" },
+      "target": { "path": "RobotKinematicState/TCPPosition", "name": "Z", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tcp.value_3",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/TCPOrientation/Component1",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_pos2", "field": "value_0" },
+      "target": { "path": "RobotKinematicState/TCPOrientation", "name": "Component1", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tcp.value_4",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/TCPOrientation/Component2",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_pos2", "field": "value_1" },
+      "target": { "path": "RobotKinematicState/TCPOrientation", "name": "Component2", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tcp.value_5",
+      "node_id": "ns=2;s=HH7_AAS_Template_v0.2/HH7/RobotKinematicState/TCPOrientation/Component3",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_pos2", "field": "value_2" },
+      "target": { "path": "RobotKinematicState/TCPOrientation", "name": "Component3", "data_type": "Float" }
+    },
+    {
+      "tag_id": "encoder_temp_01_03.value_0",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "encoder_temp_01_03", "field": "value_0" },
+      "target": { "path": "OperationalData/Axis/EncoderTemp", "name": "J1", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tool_length.tool_weight",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_length", "field": "tool_weight" },
+      "target": { "path": "OperationalData/Tool", "name": "Weight", "data_type": "Float" }
+    },
+    {
+      "tag_id": "tool_length.tool_data_x",
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_length", "field": "tool_data_x" },
+      "target": { "path": "OperationalData/Tool", "name": "LengthX", "data_type": "Float" }
+    }
+  ]
+}
