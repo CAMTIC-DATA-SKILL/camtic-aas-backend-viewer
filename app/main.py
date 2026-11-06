@@ -138,6 +138,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         allow_origins=list(app_settings.cors_origins),
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Captured-Values"],
     )
     app.include_router(router)
     app.include_router(opcua_router)

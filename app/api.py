@@ -20,10 +20,13 @@ from .documentation import (
     public_file_url,
     serialize_documentation,
 )
+from .opc_ua import OpcUaSession
+from .opcua_api import captured_property_values, get_opcua
 from .opcua_export import ARTIFACT_NAMES, generate_opcua_artifacts, list_artifacts
-from .repository import AasxPackage, AasxRepository
+from .repository import AasxPackage, AasxRepository, write_aasx_bytes
 from .serializers import TreeBuilder, decode_id, encode_id, package_summary
 from .simulation import build_simulation_payload, ensure_package_mesh
+from .value_snapshot import capture_object_store
 
 router = APIRouter(prefix="/api")
 
@@ -152,14 +155,48 @@ def _content_disposition(filename: str) -> dict[str, str]:
     return {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
 
 
-def _serialize_package(package: AasxPackage, file_format: Literal["aasx", "json", "xml"]) -> Response:
+def _download_headers(filename: str, captured: int) -> dict[str, str]:
+    return {**_content_disposition(filename), "X-Captured-Values": str(captured)}
+
+
+def _captured_store(
+    package: AasxPackage, repository: Optional[AasxRepository], session: Optional[OpcUaSession]
+) -> tuple[Optional[model.DictIdentifiableStore], int]:
+    if package.error or repository is None or session is None:
+        return None, 0
+    values = captured_property_values(package, repository, session)
+    return capture_object_store(package.objects, values)
+
+
+def _serialize_package(
+    package: AasxPackage,
+    file_format: Literal["aasx", "json", "xml"],
+    repository: Optional[AasxRepository] = None,
+    session: Optional[OpcUaSession] = None,
+) -> Response:
+    """구독 중인 현장 값이 있으면 Property 에 넣은 사본을 내려준다. 원본 파일과 메모리 모델은 그대로 둔다."""
+    try:
+        captured_store, captured = _captured_store(package, repository, session)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to capture live values: {e}"
+        ) from e
+
     if file_format == "aasx":
-        if not package.path.is_file():
-            raise HTTPException(status_code=404, detail="AASX file not found on disk")
-        return FileResponse(
-            path=package.path,
+        if captured_store is None:
+            if not package.path.is_file():
+                raise HTTPException(status_code=404, detail="AASX file not found on disk")
+            return FileResponse(
+                path=package.path,
+                media_type="application/asset-administration-shell-package",
+                filename=package.path.name,
+                headers={"X-Captured-Values": "0"},
+            )
+        filename = f"{package.path.stem}_snapshot.aasx"
+        return Response(
+            content=write_aasx_bytes(package, captured_store),
             media_type="application/asset-administration-shell-package",
-            filename=package.path.name,
+            headers=_download_headers(filename, captured),
         )
 
     if package.error:
@@ -167,23 +204,24 @@ def _serialize_package(package: AasxPackage, file_format: Literal["aasx", "json"
             status_code=422, detail=f"Package '{package.id}' failed to load: {package.error}"
         )
 
-    stem = package.path.stem
+    objects = captured_store if captured_store is not None else package.objects
+    stem = f"{package.path.stem}_snapshot" if captured else package.path.stem
     try:
         if file_format == "json":
-            content = object_store_to_json(package.objects, indent=2, ensure_ascii=False)
+            content = object_store_to_json(objects, indent=2, ensure_ascii=False)
             filename = f"{stem}.json"
             return Response(
                 content=content.encode("utf-8"),
                 media_type="application/json; charset=utf-8",
-                headers=_content_disposition(filename),
+                headers=_download_headers(filename, captured),
             )
         buffer = io.BytesIO()
-        write_aas_xml_file(buffer, package.objects, pretty_print=True)
+        write_aas_xml_file(buffer, objects, pretty_print=True)
         filename = f"{stem}.xml"
         return Response(
             content=buffer.getvalue(),
             media_type="application/xml",
-            headers=_content_disposition(filename),
+            headers=_download_headers(filename, captured),
         )
     except Exception as e:
         raise HTTPException(
@@ -295,9 +333,15 @@ def delete_package(
 def download_package(
     package: AasxPackage = Depends(get_package),
     file_format: Literal["aasx", "json", "xml"] = Query("aasx", alias="format"),
+    repository: AasxRepository = Depends(get_repository),
+    session: OpcUaSession = Depends(get_opcua),
 ) -> Response:
-    """패키지를 AASX, JSON, XML 중 선택한 형식으로 다운로드한다."""
-    return _serialize_package(package, file_format)
+    """패키지를 AASX, JSON, XML 로 다운로드한다.
+
+    이 패키지를 구독 중이면 그 시점의 OPC-UA 값을 Property 에 넣어 내려준다.
+    구독 값이 없으면 디스크의 원본을 그대로 내려준다.
+    """
+    return _serialize_package(package, file_format, repository, session)
 
 
 @router.get("/packages/{package_id}/tree")

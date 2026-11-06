@@ -284,15 +284,29 @@ class AasxRepository:
         return True
 
 
+def write_aasx_bytes(
+    package: AasxPackage, objects: Optional[model.DictIdentifiableStore] = None
+) -> bytes:
+    """패키지 첨부 파일을 유지한 채 object store 를 AASX 바이트로 만든다. 디스크 원본은 건드리지 않는다."""
+    buffer = io.BytesIO()
+    with aasx.AASXWriter(buffer, failsafe=False) as writer:
+        writer.write_all_aas_objects(
+            "/aasx/data.json",
+            package.objects if objects is None else objects,
+            package.files,
+            write_json=True,
+        )
+        _write_thumbnail(writer, package)
+        _write_core_properties(writer, package)
+    return buffer.getvalue()
+
+
 def write_package(package: AasxPackage) -> None:
     """현재 메모리 상태를 원본 AASX 경로에 원자적으로 덮어쓴다."""
     target = package.path
     tmp = target.with_name(f".{target.name}.tmp")
     try:
-        with aasx.AASXWriter(tmp, failsafe=False) as writer:
-            writer.write_all_aas_objects("/aasx/data.json", package.objects, package.files, write_json=True)
-            _write_thumbnail(writer, package)
-            _write_core_properties(writer, package)
+        tmp.write_bytes(write_aasx_bytes(package))
         tmp.replace(target)
         logger.info("Rewrote AASX package %s", target)
     except Exception:

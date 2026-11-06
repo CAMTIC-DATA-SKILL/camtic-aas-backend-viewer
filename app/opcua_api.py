@@ -105,6 +105,39 @@ def empty_live_response(
     }
 
 
+def captured_property_values(
+    package: AasxPackage,
+    repository: AasxRepository,
+    session: OpcUaSession,
+) -> list[dict[str, Any]]:
+    """뷰어에 올라가는 것과 같은 구독 값. 이 패키지가 구독 중이 아니거나 값이 없으면 빈 목록."""
+    if package.error:
+        return []
+    field_namespace = _field_namespace(session)
+    _source, nodes, _node_ids, aas_id = _package_live_source(
+        package, repository, field_namespace=field_namespace
+    )
+    if not nodes:
+        return []
+    payload = engineering_live_response(
+        nodes,
+        session,
+        package.id,
+        aas_id=aas_id,
+        field_namespace=field_namespace,
+    )
+    captured: list[dict[str, Any]] = []
+    for item in payload.get("values") or []:
+        if not item.get("usable") or item.get("value") is None:
+            continue
+        submodel = str(item.get("submodelIdShort") or "")
+        path = str(item.get("path") or "")
+        if not submodel or not path:
+            continue
+        captured.append({"submodelIdShort": submodel, "path": path, "value": item["value"]})
+    return captured
+
+
 def mapping_live_response(
     mapping: AasOpcUaMapping,
     session: OpcUaSession,
