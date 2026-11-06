@@ -175,6 +175,8 @@ def load_manufacturing_config() -> ManufacturingConfig:
 class Settings:
     aasx_data_dir: Path
     artifacts_dir: Path
+    digital_twin_step_dir: Path
+    digital_twin_usd_dir: Path
 
     server_host: str
     server_port: int
@@ -196,6 +198,11 @@ def load_settings() -> Settings:
     aasx_data_dir = _path(_str("AASX_DATA_DIR"))
     artifacts_raw = os.environ.get("ARTIFACTS_DIR", "").strip()
     artifacts_dir = _path(artifacts_raw) if artifacts_raw else (aasx_data_dir.parent / "artifacts")
+    data_root = aasx_data_dir.parent
+    step_raw = os.environ.get("DIGITAL_TWIN_STEP_DIR", "").strip()
+    usd_raw = os.environ.get("DIGITAL_TWIN_USD_DIR", "").strip()
+    digital_twin_step_dir = _path(step_raw) if step_raw else (data_root / "digital_twin_step")
+    digital_twin_usd_dir = _path(usd_raw) if usd_raw else (data_root / "digital_twin_usd")
     opcua = OpcUaConfig(
         server_id=_str("OPCUA_SERVER_ID", "default"),
         endpoint=_str("OPCUA_ENDPOINT", "opc.tcp://127.0.0.1:4840"),
@@ -227,6 +234,8 @@ def load_settings() -> Settings:
     return Settings(
         aasx_data_dir=aasx_data_dir,
         artifacts_dir=artifacts_dir,
+        digital_twin_step_dir=digital_twin_step_dir,
+        digital_twin_usd_dir=digital_twin_usd_dir,
         server_host=_str("SERVER_HOST", "127.0.0.1"),
         server_port=_int("SERVER_PORT", 8000),
         server_reload=_bool("SERVER_RELOAD", False),

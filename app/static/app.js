@@ -29,6 +29,7 @@ const state = {
   filter: "",
   liveTimer: null,
   liveGen: 0,
+  statusUntil: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -100,6 +101,8 @@ async function loadPackages(reload = false) {
     );
     $("tree").replaceChildren();
     updateDownloadControls();
+    if (window.RobotSim) window.RobotSim.unload();
+    else window.__pendingSimPackage = null;
   }
 }
 
@@ -139,6 +142,8 @@ async function selectPackage(packageId) {
     state.tree = null;
     renderPackageHeader(summary);
     $("tree").replaceChildren(el("p", { className: "error-text" }, summary.error));
+    if (window.RobotSim) window.RobotSim.unload();
+    else window.__pendingSimPackage = null;
     return;
   }
 
@@ -152,6 +157,8 @@ async function selectPackage(packageId) {
   renderPackageHeader(state.tree.package);
   renderTree();
   if (window.LiveDashboard) LiveDashboard.resetHistory();
+  if (window.RobotSim) window.RobotSim.load(packageId);
+  else window.__pendingSimPackage = packageId;
   await tryLoadLiveValues({ silent: true });
   startLiveRefresh();
 }
@@ -520,6 +527,8 @@ function applyLiveFrame(result) {
   else renderTree({ preserveOpen: true });
   if (state.selectedNode) renderDetail(state.selectedNode);
   if (result.frame) window.LiveDashboard?.ingest?.(result.frame);
+  window.RobotSim?.ingest?.(result);
+  if (state.statusUntil && Date.now() < state.statusUntil) return;
   if (result.subscribeMatch === false) {
     setLiveStatus(result.message || "이 패키지는 구독 대상이 아닙니다.");
     return;
@@ -632,7 +641,25 @@ function updateDownloadControls() {
   if (uploadBtn) uploadBtn.disabled = !loaded;
 }
 
-function downloadPackage() {
+function filenameFromDisposition(header, fallback) {
+  if (!header) return fallback;
+  const encoded = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encoded) return decodeURIComponent(encoded[1]);
+  const plain = header.match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1] : fallback;
+}
+
+function saveBlob(blob, filename) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
+async function downloadPackage() {
   const pkg = selectedPackage();
   if (!pkg) return;
   const format = $("download-format")?.value || "aasx";
@@ -640,7 +667,37 @@ function downloadPackage() {
     window.alert("패키지를 로드하지 못해 JSON/XML로 내보낼 수 없습니다.");
     return;
   }
-  window.location.href = `${apiBase(pkg.id)}/download?format=${encodeURIComponent(format)}`;
+  const button = $("download-btn");
+  if (button) button.disabled = true;
+  state.statusUntil = Date.now() + 4000;
+  setLiveStatus("현재 현장 값을 담는 중...");
+  try {
+    const response = await fetch(`${apiBase(pkg.id)}/download?format=${encodeURIComponent(format)}`);
+    if (!response.ok) {
+      let message = `${response.status} ${response.statusText}`;
+      try {
+        message = (await response.json()).detail || message;
+      } catch (_) { /* not json */ }
+      throw new Error(message);
+    }
+    const captured = Number(response.headers.get("X-Captured-Values") || "0");
+    const filename = filenameFromDisposition(
+      response.headers.get("Content-Disposition"),
+      `${pkg.id}.${format === "aasx" ? "aasx" : format}`,
+    );
+    saveBlob(await response.blob(), filename);
+    state.statusUntil = Date.now() + 4000;
+    setLiveStatus(
+      captured > 0
+        ? `현장 값 ${captured}개를 담아 내려받았습니다.`
+        : "현장 값이 없어 패키지 원본을 내려받았습니다.",
+    );
+  } catch (e) {
+    state.statusUntil = Date.now() + 4000;
+    setLiveStatus(e.message, true);
+  } finally {
+    updateDownloadControls();
+  }
 }
 
 function openDocumentationUpload() {

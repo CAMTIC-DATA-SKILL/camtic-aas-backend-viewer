@@ -2,6 +2,7 @@ import binascii
 import io
 import json
 import zipfile
+from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import quote
 
@@ -14,12 +15,18 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from .documentation import (
     Attachment,
     apply_attachments,
+    documentation_needs_patch,
+    patch_documentation_slots,
     public_file_url,
     serialize_documentation,
 )
+from .opc_ua import OpcUaSession
+from .opcua_api import captured_property_values, get_opcua
 from .opcua_export import ARTIFACT_NAMES, generate_opcua_artifacts, list_artifacts
-from .repository import AasxPackage, AasxRepository
+from .repository import AasxPackage, AasxRepository, write_aasx_bytes
 from .serializers import TreeBuilder, decode_id, encode_id, package_summary
+from .simulation import build_simulation_payload, ensure_package_mesh
+from .value_snapshot import capture_object_store
 
 router = APIRouter(prefix="/api")
 
@@ -148,14 +155,48 @@ def _content_disposition(filename: str) -> dict[str, str]:
     return {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
 
 
-def _serialize_package(package: AasxPackage, file_format: Literal["aasx", "json", "xml"]) -> Response:
+def _download_headers(filename: str, captured: int) -> dict[str, str]:
+    return {**_content_disposition(filename), "X-Captured-Values": str(captured)}
+
+
+def _captured_store(
+    package: AasxPackage, repository: Optional[AasxRepository], session: Optional[OpcUaSession]
+) -> tuple[Optional[model.DictIdentifiableStore], int]:
+    if package.error or repository is None or session is None:
+        return None, 0
+    values = captured_property_values(package, repository, session)
+    return capture_object_store(package.objects, values)
+
+
+def _serialize_package(
+    package: AasxPackage,
+    file_format: Literal["aasx", "json", "xml"],
+    repository: Optional[AasxRepository] = None,
+    session: Optional[OpcUaSession] = None,
+) -> Response:
+    """구독 중인 현장 값이 있으면 Property 에 넣은 사본을 내려준다. 원본 파일과 메모리 모델은 그대로 둔다."""
+    try:
+        captured_store, captured = _captured_store(package, repository, session)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to capture live values: {e}"
+        ) from e
+
     if file_format == "aasx":
-        if not package.path.is_file():
-            raise HTTPException(status_code=404, detail="AASX file not found on disk")
-        return FileResponse(
-            path=package.path,
+        if captured_store is None:
+            if not package.path.is_file():
+                raise HTTPException(status_code=404, detail="AASX file not found on disk")
+            return FileResponse(
+                path=package.path,
+                media_type="application/asset-administration-shell-package",
+                filename=package.path.name,
+                headers={"X-Captured-Values": "0"},
+            )
+        filename = f"{package.path.stem}_snapshot.aasx"
+        return Response(
+            content=write_aasx_bytes(package, captured_store),
             media_type="application/asset-administration-shell-package",
-            filename=package.path.name,
+            headers=_download_headers(filename, captured),
         )
 
     if package.error:
@@ -163,23 +204,24 @@ def _serialize_package(package: AasxPackage, file_format: Literal["aasx", "json"
             status_code=422, detail=f"Package '{package.id}' failed to load: {package.error}"
         )
 
-    stem = package.path.stem
+    objects = captured_store if captured_store is not None else package.objects
+    stem = f"{package.path.stem}_snapshot" if captured else package.path.stem
     try:
         if file_format == "json":
-            content = object_store_to_json(package.objects, indent=2, ensure_ascii=False)
+            content = object_store_to_json(objects, indent=2, ensure_ascii=False)
             filename = f"{stem}.json"
             return Response(
                 content=content.encode("utf-8"),
                 media_type="application/json; charset=utf-8",
-                headers=_content_disposition(filename),
+                headers=_download_headers(filename, captured),
             )
         buffer = io.BytesIO()
-        write_aas_xml_file(buffer, package.objects, pretty_print=True)
+        write_aas_xml_file(buffer, objects, pretty_print=True)
         filename = f"{stem}.xml"
         return Response(
             content=buffer.getvalue(),
             media_type="application/xml",
-            headers=_content_disposition(filename),
+            headers=_download_headers(filename, captured),
         )
     except Exception as e:
         raise HTTPException(
@@ -258,7 +300,11 @@ async def upload_package(
     return {
         "package": _summary(package, repository),
         "artifacts": artifacts_info,
-        "documentation": _documentation_payload(request, package) if not package.error else None,
+        "documentation": (
+            _ensured_documentation_payload(request, repository, package)
+            if not package.error
+            else None
+        ),
     }
 
 
@@ -287,9 +333,15 @@ def delete_package(
 def download_package(
     package: AasxPackage = Depends(get_package),
     file_format: Literal["aasx", "json", "xml"] = Query("aasx", alias="format"),
+    repository: AasxRepository = Depends(get_repository),
+    session: OpcUaSession = Depends(get_opcua),
 ) -> Response:
-    """패키지를 AASX, JSON, XML 중 선택한 형식으로 다운로드한다."""
-    return _serialize_package(package, file_format)
+    """패키지를 AASX, JSON, XML 로 다운로드한다.
+
+    이 패키지를 구독 중이면 그 시점의 OPC-UA 값을 Property 에 넣어 내려준다.
+    구독 값이 없으면 디스크의 원본을 그대로 내려준다.
+    """
+    return _serialize_package(package, file_format, repository, session)
 
 
 @router.get("/packages/{package_id}/tree")
@@ -361,12 +413,29 @@ def _documentation_payload(request: Request, package: AasxPackage) -> dict[str, 
     return serialize_documentation(package, file_url)
 
 
+def _ensured_documentation_payload(
+    request: Request, repository: AasxRepository, package: AasxPackage
+) -> dict[str, Any]:
+    extra = {"created": False, "patched": []}
+    if documentation_needs_patch(package):
+        package, extra = repository.update_and_rewrite(package.id, patch_documentation_slots)
+    payload = _documentation_payload(request, package)
+    payload["created"] = bool(extra.get("created"))
+    payload["patched"] = list(extra.get("patched") or [])
+    return payload
+
+
 @router.get("/packages/{package_id}/documentation")
 def get_documentation(
-    request: Request, package: AasxPackage = Depends(get_loaded_package)
+    request: Request,
+    package: AasxPackage = Depends(get_loaded_package),
+    repository: AasxRepository = Depends(get_repository),
 ) -> dict[str, Any]:
-    """Documentation Submodel 항목과 첨부 파일 목록을 반환한다."""
-    return _documentation_payload(request, package)
+    """Documentation Submodel 항목과 첨부 파일 목록을 반환한다.
+
+    메인 CAD/USD File 슬롯이 없으면 SemanticID를 붙인 빈 슬롯으로 패치한 뒤 반환한다.
+    """
+    return _ensured_documentation_payload(request, repository, package)
 
 
 @router.post("/packages/{package_id}/documentation/files")
@@ -389,7 +458,14 @@ async def upload_documentation_files(
         if not attachments:
             raise ValueError("첨부할 파일이 없습니다.")
         saved, added = repository.update_and_rewrite(
-            package.id, lambda pkg: apply_attachments(pkg, attachments)
+            package.id,
+            lambda pkg: apply_attachments(
+                pkg,
+                attachments,
+                store_twin=lambda kind, filename, content: repository.write_digital_twin_file(
+                    pkg.id, kind, filename, content
+                ),
+            ),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -398,11 +474,48 @@ async def upload_documentation_files(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to attach documentation files: {e}") from e
 
+    if any(item.get("kind") == "step" for item in added.get("added") or []):
+        try:
+            ensure_package_mesh(repository, saved)
+        except Exception:
+            pass
+
     payload = _documentation_payload(request, saved)
     payload["created"] = added["created"]
+    payload["patched"] = added.get("patched") or []
     payload["added"] = added["added"]
     payload["package"] = _summary(saved, repository)
     return payload
+
+
+@router.get("/packages/{package_id}/simulation")
+def get_simulation(
+    request: Request,
+    package: AasxPackage = Depends(get_loaded_package),
+    repository: AasxRepository = Depends(get_repository),
+) -> dict[str, Any]:
+    """Documentation 메인 STEP과 선택 URDF로 위젯 구동 정보를 반환한다."""
+    root_path = request.scope.get("root_path", "")
+    return build_simulation_payload(package, repository, root_path)
+
+
+@router.get("/packages/{package_id}/simulation/mesh")
+def get_simulation_mesh(
+    package: AasxPackage = Depends(get_loaded_package),
+    repository: AasxRepository = Depends(get_repository),
+) -> FileResponse:
+    """변환된 STEP 메시(GLB)를 반환한다."""
+    info = ensure_package_mesh(repository, package)
+    mesh_path = info.get("meshPath")
+    if mesh_path is None or not Path(mesh_path).is_file():
+        detail = info.get("error") or "변환된 시뮬레이션 메시가 없습니다. Documentation에 STEP을 첨부하세요."
+        raise HTTPException(status_code=404, detail=detail)
+    return FileResponse(
+        path=mesh_path,
+        media_type="model/gltf-binary",
+        filename=Path(mesh_path).name,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def _as_named_attachments(

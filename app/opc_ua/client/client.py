@@ -261,8 +261,15 @@ class OpcUaClient:
         )
 
         subscription = await self.client.create_subscription(period, SubscriptionHandler(callback))
-        results = await subscription.subscribe_data_change(
+        # 현장 서버는 값이 그대로여도 SourceTimestamp 를 갱신한다. 기본 필터(StatusValue)는
+        # 그 알림을 버리므로 Position·Orientation 이 빠지고, 0 과 -0 이 오가는 Speed 만 남는다.
+        data_filter = ua.DataChangeFilter()
+        data_filter.Trigger = ua.DataChangeTrigger.StatusValueTimestamp
+        data_filter.DeadbandType = ua.DeadbandType.None_
+        data_filter.DeadbandValue = 0.0
+        results = await subscription._subscribe(
             [self.get_node(n) for n in ids],
+            mfilter=data_filter,
             sampling_interval=sampling,
         )
 

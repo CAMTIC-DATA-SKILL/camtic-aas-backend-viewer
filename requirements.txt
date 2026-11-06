@@ -4,6 +4,9 @@ uvicorn[standard]>=0.30
 python-dotenv>=1.0
 python-multipart>=0.0.9
 asyncua>=2.0,<3
+numpy>=1.26
+trimesh>=4.4
+cascadio>=0.1.1
 # 제조설비 시계열 DB (기존 운영 TimescaleDB 연동 — 스키마 생성·마이그레이션 도구는 사용하지 않는다)
 sqlalchemy[asyncio]>=2.0,<3
 asyncpg>=0.29

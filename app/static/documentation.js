@@ -14,12 +14,25 @@
   };
   const STEP_EXTS = [".stp", ".step"];
   const USD_EXTS = [".usd", ".usda", ".usdc", ".usdz"];
-
+  const MAIN_SLOTS = [
+    {
+      kind: "step",
+      idShort: "DigitalTwinCadModel",
+      semanticId: "urn:physical-ai:ids/cd/DigitalTwinCadModel/1/0",
+    },
+    {
+      kind: "usd",
+      idShort: "DigitalTwinUsdModel",
+      semanticId: "urn:physical-ai:ids/cd/DigitalTwinUsdModel/1/0",
+    },
+  ];
   const state = {
     packageId: null,
     rows: [],
     nextId: 1,
     onSaved: null,
+    slotFiles: { step: null, usd: null },
+    docs: null,
   };
 
   function $(id) {
@@ -104,7 +117,7 @@
           el(
             "p",
             { className: "muted" },
-            "AASX의 Documentation 항목을 확인하고 STEP, USD 등 DT 모델링 파일을 첨부합니다.",
+            "메인 CAD/USD 모델은 SemanticID로 구분합니다. 슬롯을 클릭하거나 파일을 끌어다 놓으세요. 파일이 없으면 '파일 없음'입니다. 그 외 에셋만 + 로 추가합니다.",
           ),
           el("div", { id: "doc-submodel-meta", className: "doc-meta" }),
           el(
@@ -119,8 +132,8 @@
             el(
               "div",
               { className: "doc-section-head" },
-              el("h3", {}, "DT 모델링 파일 첨부"),
-              el("button", { id: "doc-add-btn", type: "button", className: "doc-plus-btn", title: "첨부 항목 추가" }, "+"),
+              el("h3", {}, "추가 에셋"),
+              el("button", { id: "doc-add-btn", type: "button", className: "doc-plus-btn", title: "추가 에셋 첨부" }, "+"),
             ),
             el("div", { id: "doc-entry-list", className: "doc-entry-list" }),
           ),
@@ -166,7 +179,7 @@
   function renderRows() {
     const box = $("doc-entry-list");
     if (!state.rows.length) {
-      box.replaceChildren(el("p", { className: "muted" }, "+ 버튼을 눌러 File 이름과 종류를 지정한 뒤 파일을 첨부하세요."));
+      box.replaceChildren(el("p", { className: "muted" }, "+ 버튼으로 메인 모델 이외의 추가 에셋을 첨부하세요."));
       return;
     }
     box.replaceChildren(...state.rows.map(renderRow));
@@ -206,7 +219,7 @@
             id: `doc-name-${row.id}`,
             type: "text",
             value: row.name,
-            placeholder: "예: RobotCAD",
+            placeholder: "예: ToolCAD (메인 슬롯 이름 제외)",
             spellcheck: "false",
             oninput: (e) => {
               row.name = e.target.value;
@@ -288,24 +301,44 @@
     }
     row.file = file;
     if (!sanitizeIdShort(row.name)) {
-      row.name = sanitizeIdShort(file.name.replace(/\.[^.]+$/, "")) || row.name;
+      const auto = sanitizeIdShort(file.name.replace(/\.[^.]+$/, ""));
+      row.name = reservedNameError(auto) ? "" : auto;
     }
     renderRows();
     updateSubmitState();
     showStatus("", false, true);
   }
 
+  function reservedNameError(name) {
+    const cleaned = sanitizeIdShort(name);
+    const slot = MAIN_SLOTS.find(
+      (item) =>
+        item.idShort.toLowerCase() === cleaned.toLowerCase() ||
+        item.kind === cleaned.toLowerCase() ||
+        item.kind.toUpperCase() === cleaned,
+    );
+    if (slot) {
+      return `메인 모델은 위 ${slot.idShort} 슬롯에서만 지정합니다.`;
+    }
+    return "";
+  }
+
   function readyRows() {
     return state.rows.filter((row) => row.file);
   }
 
+  function readySlots() {
+    return MAIN_SLOTS.filter((slot) => state.slotFiles[slot.kind]);
+  }
+
   function updateSubmitState() {
-    if ($("doc-upload-submit")) $("doc-upload-submit").disabled = !readyRows().length;
+    if ($("doc-upload-submit")) $("doc-upload-submit").disabled = !(readyRows().length || readySlots().length);
   }
 
   function resetSelection() {
     state.rows = [];
     state.nextId = 1;
+    state.slotFiles = { step: null, usd: null };
     if ($("doc-entry-list")) renderRows();
     updateSubmitState();
   }
@@ -324,6 +357,7 @@
   }
 
   function renderDocumentation(docs) {
+    state.docs = docs;
     const submodels = docs.submodels || [];
     const files = submodels.flatMap((sm) => sm.files || []);
     $("doc-submodel-meta").replaceChildren(
@@ -336,48 +370,156 @@
               .map((sm) => `${sm.idShort || "Documentation"}${sm.semanticId ? ` · ${sm.semanticId}` : ""}`)
               .join(" / "),
           )
-        : el("div", { className: "muted" }, "Documentation Submodel이 없습니다. 파일을 첨부하면 새로 만듭니다."),
+        : el("div", { className: "muted" }, "Documentation Submodel이 없습니다. 열면 메인 모델 슬롯을 만듭니다."),
     );
 
-    if (!files.length) {
-      $("doc-file-list").replaceChildren(el("p", { className: "muted" }, "아직 첨부된 파일이 없습니다."));
-      return;
-    }
+    const extras = files.filter((item) => !isMainSlotFile(item));
     $("doc-file-list").replaceChildren(
       el(
         "ul",
         {},
-        files.map((item) =>
-          el(
-            "li",
-            {},
-            el("span", { className: `doc-kind-badge ${item.kind}` }, KIND_LABEL[item.kind] || "파일"),
-            el("span", { className: "doc-file-name" }, item.idShort || item.fileName || "(이름 없음)"),
-            el("span", { className: "muted" }, item.fileName || "-"),
-            el("span", { className: "muted" }, formatBytes(item.size)),
-            item.url ? el("a", { href: item.url, target: "_blank", rel: "noopener" }, "열기") : null,
-          ),
-        ),
+        MAIN_SLOTS.map((slot) => renderSlotRow(slot, findSlotFile(files, slot))),
+        extras.map((item) => renderExistingRow(item)),
       ),
     );
+    updateSubmitState();
+  }
+
+  function isMainSlotFile(item) {
+    return MAIN_SLOTS.some(
+      (slot) =>
+        item.semanticId === slot.semanticId ||
+        item.idShort === slot.idShort ||
+        (item.idShort || "").toLowerCase() === slot.kind,
+    );
+  }
+
+  function findSlotFile(files, slot) {
+    return (
+      files.find((item) => item.semanticId === slot.semanticId) ||
+      files.find((item) => item.idShort === slot.idShort) ||
+      null
+    );
+  }
+
+  function renderSlotRow(slot, item) {
+    const pending = state.slotFiles[slot.kind];
+    const missing = !pending && (!item || item.missing || !item.packagePath);
+    const inputId = `doc-slot-${slot.kind}`;
+    const fileLabel = pending
+      ? `${pending.name} (${formatBytes(pending.size)}) · 첨부 대기`
+      : missing
+        ? "파일 없음"
+        : item.fileName || "-";
+    const input = el("input", {
+      id: inputId,
+      type: "file",
+      accept: ACCEPT[slot.kind],
+      hidden: true,
+      onchange: (e) => setSlotFile(slot, e.target.files?.[0] || null, e.target),
+    });
+    const row = el(
+      "li",
+      {
+        className: `doc-slot${missing && !pending ? " is-empty" : ""}`,
+        title: "클릭하거나 파일을 끌어다 놓으세요",
+      },
+      el("span", { className: `doc-kind-badge ${slot.kind}` }, KIND_LABEL[slot.kind]),
+      el(
+        "span",
+        { className: "doc-slot-identity" },
+        el("span", { className: "doc-file-name" }, slot.idShort),
+        el("span", { className: "doc-slot-semantic" }, slot.semanticId),
+      ),
+      el("span", { className: missing && !pending ? "doc-missing" : "muted" }, fileLabel),
+      el("span", { className: "muted" }, pending || missing ? "" : formatBytes(item?.size)),
+      !pending && item?.url
+        ? el("a", { href: item.url, target: "_blank", rel: "noopener" }, "열기")
+        : el("span", { className: "muted" }, ""),
+      el("label", { className: "doc-slot-pick", for: inputId }, input, missing ? "파일 선택" : "바꾸기"),
+    );
+    bindSlotDrop(row, slot, input);
+    return row;
+  }
+
+  function bindSlotDrop(row, slot, input) {
+    row.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      row.classList.add("dragover");
+    });
+    row.addEventListener("dragleave", () => row.classList.remove("dragover"));
+    row.addEventListener("drop", (e) => {
+      e.preventDefault();
+      row.classList.remove("dragover");
+      setSlotFile(slot, e.dataTransfer?.files?.[0] || null);
+    });
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("a, input, label")) return;
+      input.click();
+    });
+  }
+
+  function renderExistingRow(item) {
+    return el(
+      "li",
+      {},
+      el("span", { className: `doc-kind-badge ${item.kind}` }, KIND_LABEL[item.kind] || "파일"),
+      el("span", { className: "doc-file-name" }, item.idShort || item.fileName || "(이름 없음)"),
+      el("span", { className: "muted" }, item.fileName || "-"),
+      el("span", { className: "muted" }, formatBytes(item.size)),
+      item.url ? el("a", { href: item.url, target: "_blank", rel: "noopener" }, "열기") : el("span", {}, ""),
+      el("span", {}, ""),
+    );
+  }
+
+  function setSlotFile(slot, file, input) {
+    if (!file) {
+      state.slotFiles[slot.kind] = null;
+      if (state.docs) renderDocumentation(state.docs);
+      else updateSubmitState();
+      return;
+    }
+    const error = kindError(slot.kind, file.name);
+    if (error) {
+      window.alert(`${slot.idShort}: ${error}`);
+      if (input) input.value = "";
+      return;
+    }
+    state.slotFiles[slot.kind] = file;
+    if (state.docs) renderDocumentation(state.docs);
+    else updateSubmitState();
+    showStatus("", false, true);
   }
 
   async function loadDocumentation(packageId, seed) {
     if (seed) {
       renderDocumentation(seed);
+      if ((seed.patched || []).length) state.onSaved?.(seed);
       return seed;
     }
     $("doc-file-list").replaceChildren(el("p", { className: "muted" }, "불러오는 중..."));
     const docs = await fetchJson(`/api/packages/${encodeURIComponent(packageId)}/documentation`);
     renderDocumentation(docs);
+    if ((docs.patched || []).length) state.onSaved?.(docs);
     return docs;
   }
 
   async function submitAttachments() {
     if (!state.packageId) return;
     const rows = readyRows();
-    if (!rows.length) return;
+    const slots = readySlots();
+    if (!rows.length && !slots.length) return;
     for (const row of rows) {
+      const name = sanitizeIdShort(row.name);
+      if (!name) {
+        window.alert(`${row.file.name}: 추가 에셋은 File 이름을 입력하세요. 메인 모델 슬롯 이름은 사용할 수 없습니다.`);
+        return;
+      }
+      const reserved = reservedNameError(name);
+      if (reserved) {
+        window.alert(`${row.name || row.file.name}: ${reserved}`);
+        return;
+      }
       const error = kindError(row.kind, row.file.name);
       if (error) {
         window.alert(`${row.name || row.file.name}: ${error}`);
@@ -385,6 +527,12 @@
       }
     }
     const form = new FormData();
+    for (const slot of slots) {
+      const file = state.slotFiles[slot.kind];
+      form.append("files", file, file.name);
+      form.append("kinds", slot.kind);
+      form.append("names", slot.idShort);
+    }
     for (const row of rows) {
       form.append("files", row.file, row.file.name);
       form.append("kinds", row.kind);
