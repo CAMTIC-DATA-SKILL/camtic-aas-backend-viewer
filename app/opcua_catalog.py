@@ -1,7 +1,8 @@
 """OPC-UA 서버 카탈로그.
 
 접속 정보(엔드포인트·보안 정책)만 둔다.
-구독 토픽은 해당 AAS 산출물 engineering.csv 이다.
+한 서버의 구독 캐시는 `aasId` 하나 또는 `aasIds` 여러 AAS 가 함께 읽는다.
+구독 토픽은 각 AAS 산출물 engineering.csv 이고, 같은 OPC-UA 주소는 한 번만 구독한다.
 현장 네임스페이스가 산출물(`ns=1`)과 다르면 `nodeIdNamespace` 를 적는다.
 
 찾는 순서:
@@ -32,8 +33,12 @@ class CatalogServer:
     endpoint: str
     security_policy: str = "None"
     security_mode: str = "SignAndEncrypt"
-    aas_id: str = ""
+    aas_ids: tuple[str, ...] = ()
     node_id_namespace: Optional[int] = None
+
+    @property
+    def aas_id(self) -> str:
+        return self.aas_ids[0] if self.aas_ids else ""
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -45,6 +50,8 @@ class CatalogServer:
         }
         if self.aas_id:
             payload["aasId"] = self.aas_id
+        if len(self.aas_ids) > 1:
+            payload["aasIds"] = list(self.aas_ids)
         if self.node_id_namespace is not None:
             payload["nodeIdNamespace"] = self.node_id_namespace
         return payload
@@ -119,6 +126,7 @@ def _from_config(cfg: OpcUaConfig) -> OpcUaCatalog:
         endpoint=cfg.endpoint,
         security_policy=cfg.security_policy,
         security_mode=cfg.security_mode,
+        aas_ids=(),
     )
     return OpcUaCatalog(source="env", default_server_id=server.id, servers=(server,))
 
@@ -151,9 +159,30 @@ def _parse_server(raw: dict[str, Any], index: int) -> CatalogServer:
         endpoint=endpoint,
         security_policy=str(raw.get("securityPolicy") or "None").strip() or "None",
         security_mode=str(raw.get("securityMode") or "SignAndEncrypt").strip() or "SignAndEncrypt",
-        aas_id=str(raw.get("aasId") or "").strip(),
+        aas_ids=_parse_aas_ids(raw, index),
         node_id_namespace=_parse_namespace(raw.get("nodeIdNamespace"), index),
     )
+
+
+def _parse_aas_ids(raw: dict[str, Any], index: int) -> tuple[str, ...]:
+    """`aasId` 하나와 `aasIds` 목록을 합친다. 순서를 유지하고 같은 id 는 한 번만 둔다."""
+    found: list[str] = []
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in found:
+            found.append(text)
+
+    many = raw.get("aasIds")
+    if isinstance(many, str):
+        add(many)
+    elif isinstance(many, list):
+        for item in many:
+            add(item)
+    elif many not in (None, ""):
+        raise ValueError(f"servers[{index}].aasIds 는 문자열 목록이어야 합니다.")
+    add(raw.get("aasId"))
+    return tuple(found)
 
 
 def _parse_namespace(raw: Any, index: int) -> Optional[int]:

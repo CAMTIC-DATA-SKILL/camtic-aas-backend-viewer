@@ -27,6 +27,7 @@ class OpcUaSession:
         self._desired_node_ids: list[str] = []
         self._catalog_server_id: Optional[str] = None
         self._subscribe_package_id: Optional[str] = None
+        self._subscribe_package_ids: list[str] = []
         self._restore_task: asyncio.Task[None] | None = None
         # 수신 알림을 _latest 외에 받을 곳 (예: TimescaleDB 기록). 콜백 안에서 오래 걸리면 안 된다.
         self._listeners: list[Callable[[DataChange, datetime], None]] = []
@@ -43,8 +44,16 @@ class OpcUaSession:
         return self._catalog_server_id
 
     @property
+    def subscribe_package_ids(self) -> list[str]:
+        if self._subscribe_package_ids:
+            return list(self._subscribe_package_ids)
+        single = (self._subscribe_package_id or "").strip()
+        return [single] if single else []
+
+    @property
     def subscribe_package_id(self) -> Optional[str]:
-        return self._subscribe_package_id
+        ids = self.subscribe_package_ids
+        return ids[0] if ids else None
 
     @property
     def subscribed_node_ids(self) -> list[str]:
@@ -58,7 +67,8 @@ class OpcUaSession:
             "clientName": cfg.client_name,
             "securityPolicy": cfg.security_policy,
             "catalogServerId": self._catalog_server_id,
-            "subscribePackageId": self._subscribe_package_id,
+            "subscribePackageId": self.subscribe_package_id,
+            "subscribePackageIds": self.subscribe_package_ids,
             "subscribedNodeIds": list(self._subscribed),
             "latestCount": len(self._latest),
         }
@@ -96,7 +106,7 @@ class OpcUaSession:
                     await self._client.disconnect()
                     self._reset_cache()
                     self._desired_node_ids = []
-                    self._subscribe_package_id = None
+                    self._clear_packages()
                     client = OpcUaClient(cfg)
                     await self._attach_client(client)
                     restore = False
@@ -118,7 +128,7 @@ class OpcUaSession:
             self._reset_cache()
             self._desired_node_ids = []
             self._catalog_server_id = None
-            self._subscribe_package_id = None
+            self._clear_packages()
         return self.status()
 
     def require_client(self) -> OpcUaClient:
@@ -157,12 +167,17 @@ class OpcUaSession:
         self,
         node_ids: list[str],
         package_id: Optional[str] = None,
+        package_ids: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         ids = list(dict.fromkeys(node_ids))
         if not ids:
             raise ValueError("구독할 노드 ID 가 없습니다.")
         async with self._lock:
-            return await self._subscribe_locked(ids, package_id=package_id)
+            return await self._subscribe_locked(
+                ids,
+                self._owner_ids(package_id, package_ids),
+                replace_packages=True,
+            )
 
     async def unsubscribe(self) -> dict[str, Any]:
         async with self._lock:
@@ -170,42 +185,70 @@ class OpcUaSession:
                 await self._client.unsubscribe_all()
             self._subscribed = []
             self._desired_node_ids = []
-            self._subscribe_package_id = None
+            self._clear_packages()
         return {"subscribedNodeIds": []}
 
     async def restore_subscription(self) -> dict[str, Any] | None:
         ids = list(self._desired_node_ids)
         if not ids or not self.is_connected:
             return None
-        return await self.subscribe(ids, package_id=self._subscribe_package_id)
+        return await self.subscribe(ids, package_ids=self.subscribe_package_ids)
 
     async def ensure_subscribed(
         self,
         node_ids: list[str],
         package_id: Optional[str] = None,
+        package_ids: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         ids = list(dict.fromkeys(node_ids))
         if not ids:
             raise ValueError("구독할 노드 ID 가 없습니다.")
+        owners = self._owner_ids(package_id, package_ids)
         async with self._lock:
             if set(ids) <= set(self._subscribed):
-                if package_id is not None:
-                    self._subscribe_package_id = package_id or None
+                self._remember_packages(owners, replace=False)
                 return self._subscribe_status()
             merged = list(dict.fromkeys([*self._subscribed, *ids]))
-            return await self._subscribe_locked(merged, package_id=package_id)
+            kept = list(dict.fromkeys([*self.subscribe_package_ids, *(owners or [])]))
+            return await self._subscribe_locked(merged, kept, replace_packages=True)
+
+    def _owner_ids(
+        self,
+        package_id: Optional[str],
+        package_ids: Optional[list[str]],
+    ) -> Optional[list[str]]:
+        if package_ids is None and package_id is None:
+            return None
+        return [*(package_ids or []), *([package_id] if package_id else [])]
+
+    def _clear_packages(self) -> None:
+        self._subscribe_package_ids = []
+        self._subscribe_package_id = None
+
+    def _remember_packages(self, package_ids: Optional[list[str]], *, replace: bool) -> None:
+        if package_ids is None:
+            return
+        cleaned = [item.strip() for item in package_ids if item and item.strip()]
+        if replace:
+            self._subscribe_package_ids = list(dict.fromkeys(cleaned))
+        else:
+            self._subscribe_package_ids = list(dict.fromkeys([*self.subscribe_package_ids, *cleaned]))
+        self._subscribe_package_id = self._subscribe_package_ids[0] if self._subscribe_package_ids else None
 
     def _subscribe_status(self) -> dict[str, Any]:
         return {
             "subscribedNodeIds": list(self._subscribed),
-            "subscribePackageId": self._subscribe_package_id,
+            "subscribePackageId": self.subscribe_package_id,
+            "subscribePackageIds": self.subscribe_package_ids,
             "catalogServerId": self._catalog_server_id,
         }
 
     async def _subscribe_locked(
         self,
         ids: list[str],
-        package_id: Optional[str] = None,
+        package_ids: Optional[list[str]] = None,
+        *,
+        replace_packages: bool = True,
     ) -> dict[str, Any]:
         client = self.require_client()
         keep = {node_id: value for node_id, value in self._latest.items() if node_id in ids}
@@ -213,13 +256,12 @@ class OpcUaSession:
         self._latest = keep
         self._subscribed = ids
         self._desired_node_ids = ids
-        if package_id is not None:
-            self._subscribe_package_id = package_id or None
+        self._remember_packages(package_ids, replace=replace_packages)
         await client.subscribe(ids, self._on_data_change)
         logger.info(
-            "OPC-UA 토픽 등록: server=%s package=%s count=%d topics=%s",
+            "OPC-UA 토픽 등록: server=%s packages=%s count=%d topics=%s",
             self._catalog_server_id or "-",
-            self._subscribe_package_id or "-",
+            self.subscribe_package_ids or "-",
             len(ids),
             ids,
         )

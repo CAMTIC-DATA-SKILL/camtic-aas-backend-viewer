@@ -39,7 +39,7 @@ async def _startup_opcua(opcua: OpcUaSession, repository: AasxRepository) -> Non
         "OPC-UA 카탈로그 접속 시도: server=%s endpoint=%s aasId=%s",
         server.id,
         server.endpoint,
-        server.aas_id or "-",
+        ",".join(server.aas_ids) or "-",
     )
     try:
         status = await connect_from_catalog(
@@ -59,7 +59,7 @@ async def _startup_opcua(opcua: OpcUaSession, repository: AasxRepository) -> Non
         "OPC-UA 토픽 등록: endpoint=%s server=%s aasId=%s count=%d",
         status.get("endpoint"),
         status.get("catalogServerId") or server.id,
-        server.aas_id or "-",
+        ",".join(server.aas_ids) or "-",
         subscribed,
     )
 
