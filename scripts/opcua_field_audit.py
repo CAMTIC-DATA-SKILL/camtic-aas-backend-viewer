@@ -167,7 +167,7 @@ async def subscription_test(client: Client, node_ids: list[str], publishing: int
 
 
 async def main(seconds: float) -> dict[str, Any]:
-    repository = AasxRepository(settings.aasx_data_dir, settings.artifacts_dir)
+    repository = AasxRepository(settings.storage)
     repository.reload()
     server = load_catalog().default_server()
     nodes = package_nodes(repository.get(PACKAGE), repository, server.node_id_namespace)

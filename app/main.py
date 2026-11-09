@@ -78,20 +78,17 @@ def _ensure_artifacts(repository: AasxRepository) -> None:
 
 
 def create_app(app_settings: Settings = settings) -> FastAPI:
-    repository = AasxRepository(
-        app_settings.aasx_data_dir,
-        app_settings.artifacts_dir,
-        app_settings.digital_twin_step_dir,
-        app_settings.digital_twin_usd_dir,
-    )
+    repository = AasxRepository(app_settings.storage)
     opcua = OpcUaSession(app_settings.opcua)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        logger.info("Loading AASX packages from %s", app_settings.aasx_data_dir)
-        logger.info("OPC-UA artifacts directory: %s", app_settings.artifacts_dir)
-        logger.info("Digital twin STEP directory: %s", app_settings.digital_twin_step_dir)
-        logger.info("Digital twin USD directory: %s", app_settings.digital_twin_usd_dir)
+        storage = app_settings.storage
+        logger.info("DATA_ROOT: %s", storage.root)
+        logger.info("AASX packages: %s", storage.packages_dir)
+        logger.info("Archive: %s", storage.archive_dir)
+        logger.info("OPC-UA catalog: %s", storage.opcua_catalog_dir)
+        logger.info("Mappings: %s", storage.mappings_dir)
         repository.reload()
         _ensure_artifacts(repository)
         mfg = app_settings.manufacturing

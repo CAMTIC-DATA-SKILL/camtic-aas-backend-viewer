@@ -12,16 +12,25 @@ from app.documentation import (
     serialize_documentation,
 )
 from app.repository import AasxRepository
+from config import resolve_storage
 from scripts.create_sample_aasx import build_camtic_sample, write_aasx
 
 
-def _repo_with_sample(tmp_path: Path) -> tuple[AasxRepository, str]:
-    data_dir = tmp_path / "aasx"
-    data_dir.mkdir()
-    write_aasx(data_dir / "camtic_sample.aasx", *build_camtic_sample())
-    repo = AasxRepository(data_dir, tmp_path / "artifacts")
+def _repository(tmp_path: Path) -> AasxRepository:
+    repo = AasxRepository(resolve_storage(tmp_path))
     repo.reload()
-    return repo, "camtic_sample"
+    return repo
+
+
+def _write_package(tmp_path: Path, package_id: str, *args, **kwargs) -> None:
+    path = resolve_storage(tmp_path).aasx_path(package_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_aasx(path, *args, **kwargs)
+
+
+def _repo_with_sample(tmp_path: Path) -> tuple[AasxRepository, str]:
+    _write_package(tmp_path, "camtic_sample", *build_camtic_sample())
+    return _repository(tmp_path), "camtic_sample"
 
 
 def test_attach_creates_documentation_submodel(tmp_path: Path):
@@ -93,8 +102,6 @@ def test_attach_replaces_existing_step_file(tmp_path: Path):
 
 
 def test_existing_documentation_submodel_is_reused(tmp_path: Path):
-    data_dir = tmp_path / "aasx"
-    data_dir.mkdir()
     files = aasx.DictSupplementaryFileContainer()
     documentation = model.Submodel(
         id_="https://example.org/sm/Documentation",
@@ -112,10 +119,9 @@ def test_existing_documentation_submodel_is_reused(tmp_path: Path):
         submodel={model.ModelReference.from_referable(documentation)},
     )
     store = model.DictIdentifiableStore([shell, documentation])
-    write_aasx(data_dir / "demo.aasx", store, files)
+    _write_package(tmp_path, "demo", store, files)
 
-    repo = AasxRepository(data_dir, tmp_path / "artifacts")
-    repo.reload()
+    repo = _repository(tmp_path)
     saved, added = repo.update_and_rewrite(
         "demo",
         lambda pkg: apply_attachments(pkg, [Attachment("usd", "scene.usdz", b"PK\x03\x04")]),
@@ -175,8 +181,6 @@ def test_patch_creates_empty_step_and_usd_slots(tmp_path: Path):
 
 
 def test_patch_renames_step_alias_to_canonical(tmp_path: Path):
-    data_dir = tmp_path / "aasx"
-    data_dir.mkdir()
     files = aasx.DictSupplementaryFileContainer()
     documentation = model.Submodel(
         id_="https://example.org/sm/Documentation",
@@ -195,10 +199,9 @@ def test_patch_renames_step_alias_to_canonical(tmp_path: Path):
         ),
         submodel={model.ModelReference.from_referable(documentation)},
     )
-    write_aasx(data_dir / "demo.aasx", model.DictIdentifiableStore([shell, documentation]), files)
+    _write_package(tmp_path, "demo", model.DictIdentifiableStore([shell, documentation]), files)
 
-    repo = AasxRepository(data_dir, tmp_path / "artifacts")
-    repo.reload()
+    repo = _repository(tmp_path)
     saved, extra = repo.update_and_rewrite("demo", patch_documentation_slots)
     assert extra["created"] is False
     assert extra["patched"] == ["DigitalTwinCadModel", "DigitalTwinUsdModel"]
@@ -213,10 +216,6 @@ def test_patch_renames_step_alias_to_canonical(tmp_path: Path):
 
 def test_main_slot_files_are_copied_to_digital_twin_dirs(tmp_path: Path):
     repo, package_id = _repo_with_sample(tmp_path)
-    step_dir = tmp_path / "digital_twin_step"
-    usd_dir = tmp_path / "digital_twin_usd"
-    repo.digital_twin_step_dir = step_dir
-    repo.digital_twin_usd_dir = usd_dir
 
     saved, added = repo.update_and_rewrite(
         package_id,
@@ -236,8 +235,8 @@ def test_main_slot_files_are_copied_to_digital_twin_dirs(tmp_path: Path):
     assert Path(by_id["DigitalTwinCadModel"]["diskPath"]).read_bytes() == b"ISO-10303-STEP"
     assert Path(by_id["DigitalTwinUsdModel"]["diskPath"]).read_bytes() == b"#usda 1.0\n"
     assert by_id["Mesh"]["diskPath"] is None
-    assert (step_dir / saved.id / "cell.stp").is_file()
-    assert (usd_dir / saved.id / "cell.usda").is_file()
+    assert (repo.layout.cad_dir(saved.id) / "cell.stp").is_file()
+    assert (repo.layout.usd_dir(saved.id) / "cell.usda").is_file()
 
     repo.update_and_rewrite(
         package_id,
@@ -249,5 +248,6 @@ def test_main_slot_files_are_copied_to_digital_twin_dirs(tmp_path: Path):
             ),
         ),
     )
-    assert not (step_dir / saved.id / "cell.stp").exists()
-    assert (step_dir / saved.id / "newer.stp").read_bytes() == b"new-step"
+    cad_dir = repo.layout.cad_dir(saved.id)
+    assert not (cad_dir / "cell.stp").exists()
+    assert (cad_dir / "newer.stp").read_bytes() == b"new-step"

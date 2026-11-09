@@ -75,7 +75,7 @@ def package_summary(
     summary = _compact(
         {
             "id": package.id,
-            "fileName": package.path.name,
+            "fileName": package.file_name,
             "fileSize": package.path.stat().st_size if package.path.is_file() else None,
             "loadedAt": package.loaded_at.isoformat(),
             "error": package.error,

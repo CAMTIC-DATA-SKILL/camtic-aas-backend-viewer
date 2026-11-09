@@ -19,7 +19,7 @@ fi
 
 if [[ ! -f "$ROOT/.env" ]]; then
   echo ".env 파일이 없습니다: $ROOT/.env" >&2
-  echo "프로젝트 루트에 .env 를 만들어 설정(AASX_DATA_DIR 등)한 뒤 다시 실행하세요." >&2
+  echo "프로젝트 루트에 .env 를 만들어 설정(DATA_ROOT 등)한 뒤 다시 실행하세요." >&2
   exit 1
 fi
 

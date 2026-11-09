@@ -13,7 +13,7 @@ from app.repository import load_package
 from app.value_snapshot import apply_captured_values, capture_object_store
 
 ROOT = Path(__file__).resolve().parents[1]
-HH7_PATH = ROOT / "data" / "aasx" / "HH7_AAS_Template_v0.2.aasx"
+HH7_PATH = ROOT / "data" / "packages" / "HH7_AAS_Template_v0.2" / "package.aasx"
 HH7_ID = "HH7_AAS_Template_v0.2"
 
 

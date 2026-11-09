@@ -6,7 +6,7 @@
 현장 네임스페이스가 산출물(`ns=1`)과 다르면 `nodeIdNamespace` 를 적는다.
 
 찾는 순서:
-1. `{AASX_DATA_DIR}/../opcua/catalog.json`
+1. `{OPCUA_CATALOG_DIR}/catalog.json` (기본 `DATA_ROOT/config/opcua`)
 2. 같은 폴더의 `catalog.local.json` 이 있으면 id 기준으로 덮어씀
 3. 파일이 없으면 `.env` 의 OPCUA_* 한 대를 카탈로그로 쓴다
 
@@ -84,7 +84,7 @@ class OpcUaCatalog:
 
 
 def catalog_dir() -> Path:
-    return settings.aasx_data_dir.parent / "opcua"
+    return settings.storage.opcua_catalog_dir
 
 
 def catalog_candidates(directory: Path | None = None) -> list[Path]:

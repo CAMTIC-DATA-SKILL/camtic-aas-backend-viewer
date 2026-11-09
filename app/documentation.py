@@ -124,7 +124,7 @@ def serialize_documentation(package: AasxPackage, file_url: FileUrlResolver) -> 
     submodels = find_documentation_submodels(package)
     return {
         "packageId": package.id,
-        "fileName": package.path.name,
+        "fileName": package.file_name,
         "created": False,
         "patched": [],
         "submodels": [_serialize_submodel(package, sm, file_url) for sm in submodels],

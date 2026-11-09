@@ -1,7 +1,7 @@
 """뷰어 테스트용 샘플 AASX 파일을 생성한다.
 
 사용법 (레포 루트에서):
-    python -m scripts.create_sample_aasx [출력 폴더(기본값: .env 의 AASX_DATA_DIR)]
+    python -m scripts.create_sample_aasx [DATA_ROOT (기본값: .env 의 DATA_ROOT)]
 
 생성 파일:
     camtic_sample.aasx        한글/영문 다국어 값, 첨부 파일, 썸네일이 포함된 간단한 예제
@@ -16,7 +16,7 @@ from basyx.aas import model
 from basyx.aas.adapter import aasx
 from basyx.aas.examples.data import example_aas
 
-from config import settings
+from config import BASE_DIR, resolve_storage, settings
 from utils.log_setup import LogSetup
 
 logger = LogSetup.get_logger(__name__)
@@ -161,10 +161,20 @@ def write_aasx(path: Path, store: model.DictIdentifiableStore, files: aasx.DictS
 
 
 def main() -> None:
-    out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else settings.aasx_data_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-    write_aasx(out_dir / "camtic_sample.aasx", *build_camtic_sample(), thumbnail=THUMBNAIL_SVG)
-    write_aasx(out_dir / "basyx_full_example.aasx", *build_full_example())
+    if len(sys.argv) > 1:
+        root = Path(sys.argv[1])
+        layout = resolve_storage(root if root.is_absolute() else BASE_DIR / root)
+    else:
+        layout = settings.storage
+    layout.ensure_tree()
+    samples = (
+        ("camtic_sample", build_camtic_sample(), THUMBNAIL_SVG),
+        ("basyx_full_example", build_full_example(), None),
+    )
+    for package_id, built, thumbnail in samples:
+        dest = layout.aasx_path(package_id)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        write_aasx(dest, *built, thumbnail=thumbnail)
 
 
 if __name__ == "__main__":

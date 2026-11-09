@@ -5,6 +5,7 @@ from asyncua import ua
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from config import settings
 from utils.log_setup import LogSetup
 
 from .live_frame import frame_from_mapping
@@ -205,11 +206,15 @@ def engineering_live_response(
 
 
 def _require_mapping(package: AasxPackage, repository: AasxRepository) -> AasOpcUaMapping:
-    mapping = load_mapping(package.id, repository.artifact_dir(package.id))
+    mapping = load_mapping(package.id, repository.package_dir(package.id))
     if mapping is None:
+        mapping_path = settings.storage.mappings_dir / f"{package.id}.json"
         raise HTTPException(
             status_code=404,
-            detail="AAS↔OPC-UA 매핑이 없습니다. data/mappings/{package_id}.json 을 추가하세요.",
+            detail=(
+                "AAS↔OPC-UA 매핑이 없습니다. "
+                f"패키지 {settings.storage.package_config_dir}/mapping.json 또는 {mapping_path} 에 두세요."
+            ),
         )
     return mapping
 
@@ -642,7 +647,7 @@ async def opcua_package_read(
 ) -> dict[str, Any]:
     artifact_dir = repository.artifact_dir(package.id)
     if source == "auto":
-        source = "mapping" if load_mapping(package.id, artifact_dir) else "engineering"
+        source = "mapping" if load_mapping(package.id, repository.package_dir(package.id)) else "engineering"
     if source == "engineering":
         return await _read_engineering_nodes(package, artifact_dir, session)
     if source != "mapping":

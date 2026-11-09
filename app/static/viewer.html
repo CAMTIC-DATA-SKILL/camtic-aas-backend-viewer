@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=23">
+  <link rel="stylesheet" href="style.css?v=28">
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -65,10 +65,26 @@
           <button type="button" id="sim-stop">STOP</button>
           <button type="button" id="sim-fit">맞춤</button>
         </div>
-        <div class="sim-viewport" id="sim-viewport">
-          <div id="sim-title" class="sim-title" hidden></div>
+        <div class="sim-stage" id="sim-stage">
+          <div class="sim-viewport" id="sim-viewport">
+            <div id="sim-title" class="sim-title" hidden></div>
+            <button type="button" id="sim-focus" class="sim-focus-btn" aria-pressed="false" aria-label="시뮬레이션 확대" title="확대">
+              <svg class="sim-icon-expand" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg class="sim-icon-shrink" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <div class="sim-hud">
+              <span>왼쪽 드래그: 회전 / 휠: 확대 / 오른쪽: 이동</span>
+              <span>연두 선: 모델 TCP 궤적 · 주황 축: 수신 TCP</span>
+            </div>
+          </div>
+          <p class="sim-stage-note" id="sim-stage-note" hidden>확대 창에서 시뮬레이션을 보고 있습니다.</p>
         </div>
-        <details class="sim-drawer">
+        <div id="sim-drawer-home">
+        <details class="sim-drawer" id="sim-drawer">
           <summary>캘리브레이션 · 매핑</summary>
           <div class="sim-drawer-body">
             <div class="sim-field-row">
@@ -100,6 +116,7 @@
             </div>
           </div>
         </details>
+        </div>
       </section>
     </aside>
 
@@ -242,6 +259,95 @@
     </div>
   </section>
 
+  <dialog id="sim-focus-dialog" class="sim-focus-dialog" aria-label="장비 렌더 시뮬레이션">
+    <div class="sim-focus-panel" id="sim-focus-panel">
+    <header>
+      <div class="live-title">
+        <h2>장비 렌더 시뮬레이션</h2>
+        <span id="sim-focus-mode" class="sim-badge">STOP</span>
+      </div>
+      <div class="sim-focus-actions">
+        <button type="button" id="sim-focus-live">LIVE</button>
+        <button type="button" id="sim-focus-demo">DEMO</button>
+        <button type="button" id="sim-focus-stop">STOP</button>
+        <button type="button" id="sim-focus-fit">맞춤</button>
+        <button type="button" id="sim-focus-close" class="sim-close-btn" aria-label="닫기" title="닫기">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <div class="sim-focus-body">
+      <aside class="sim-focus-side">
+        <h3>관절 J1~J6</h3>
+        <p class="sim-focus-note">슬라이더를 움직이면 LIVE를 멈추고 그 관절각으로 모델을 둡니다.</p>
+        <div id="sim-joint-sliders"></div>
+        <div class="sim-focus-actions">
+          <button type="button" id="sim-home">홈 포즈</button>
+          <button type="button" id="sim-clear-trace">궤적 초기화</button>
+        </div>
+        <h3>AAS ↔ 모델 좌표 정합</h3>
+        <p class="sim-focus-note">보정값이 0이면 기존 TCP 위치 구동과 같습니다. 회전은 켠 경우에만 역기구학에 넣습니다.</p>
+        <label class="sim-check"><input type="checkbox" id="sim-use-orient"> TCP 회전을 IK에 반영</label>
+        <div class="sim-focus-grid">
+          <label>회전 단위
+            <select id="sim-angle-unit"><option value="deg" selected>deg</option><option value="rad">rad</option></select>
+          </label>
+          <label>Orientation 순서
+            <select id="sim-euler-order"><option value="XYZ" selected>XYZ</option><option value="ZYX">ZYX</option><option value="ZXY">ZXY</option></select>
+          </label>
+          <label>Roll X (°)<input id="sim-frame-roll" type="number" step="1" value="0"></label>
+          <label>Pitch Y (°)<input id="sim-frame-pitch" type="number" step="1" value="0"></label>
+          <label>Yaw Z (°)<input id="sim-frame-yaw" type="number" step="1" value="0"></label>
+          <label>도구 X (mm)<input id="sim-tool-x" type="number" step="1" value="0"></label>
+          <label>도구 Y (mm)<input id="sim-tool-y" type="number" step="1" value="0"></label>
+          <label>도구 Z (mm)<input id="sim-tool-z" type="number" step="1" value="0"></label>
+          <label>기준점 X (mm)<input id="sim-frame-x" type="number" step="1" value="0"></label>
+          <label>기준점 Y (mm)<input id="sim-frame-y" type="number" step="1" value="0"></label>
+          <label>기준점 Z (mm)<input id="sim-frame-z" type="number" step="1" value="0"></label>
+        </div>
+        <button type="button" id="sim-align-tcp">현재 자세에서 위치 정합</button>
+        <p class="sim-focus-note" id="sim-model-note"></p>
+        <div id="sim-focus-drawer"></div>
+      </aside>
+      <div class="sim-focus-stage" id="sim-focus-stage"></div>
+      <aside class="sim-focus-side">
+        <h3>모델 TCP (m)</h3>
+        <div class="sim-kpi-grid">
+          <div class="sim-kpi"><span>X</span><b id="sim-kpi-x">—</b></div>
+          <div class="sim-kpi"><span>Y</span><b id="sim-kpi-y">—</b></div>
+          <div class="sim-kpi"><span>Z</span><b id="sim-kpi-z">—</b></div>
+        </div>
+        <h3>모델 방향 (°)</h3>
+        <div class="sim-kpi-grid">
+          <div class="sim-kpi"><span>Rx</span><b id="sim-kpi-rx">—</b></div>
+          <div class="sim-kpi"><span>Ry</span><b id="sim-kpi-ry">—</b></div>
+          <div class="sim-kpi"><span>Rz</span><b id="sim-kpi-rz">—</b></div>
+        </div>
+        <p class="sim-focus-status" id="sim-focus-status">정지 · 마지막 자세 유지</p>
+        <dl class="sim-focus-meta">
+          <div><dt>AAS Timestamp</dt><dd id="sim-stamp">—</dd></div>
+          <div><dt>채널 수</dt><dd id="sim-channel-count">0</dd></div>
+          <div><dt>모델 ↔ 수신 TCP</dt><dd id="sim-tcp-err">—</dd></div>
+        </dl>
+        <h3>수신 TCP</h3>
+        <p class="sim-rx" id="sim-rx-tcp">데이터 수신 대기</p>
+        <h3>선택 채널</h3>
+        <pre id="sim-map-audit" class="sim-audit">데이터 수신 대기</pre>
+        <h3>전체 채널</h3>
+        <input id="sim-data-filter" type="search" placeholder="경로 또는 값 필터">
+        <div class="sim-table-wrap">
+          <table>
+            <thead><tr><th>데이터 경로</th><th>값</th></tr></thead>
+            <tbody id="sim-data-table"><tr><td colspan="2">데이터 수신 대기</td></tr></tbody>
+          </table>
+        </div>
+      </aside>
+    </div>
+    </div>
+  </dialog>
+
   <dialog id="live-json-dialog" class="live-json-dialog">
     <header>
       <div class="live-title">
@@ -261,7 +367,7 @@
   <script src="documentation.js?v=4"></script>
   <script src="live.js?v=8"></script>
   <script src="app.js?v=15"></script>
-  <script type="module" src="sim.js?v=11"></script>
+  <script type="module" src="sim.js?v=14"></script>
   <script src="tsdb-monitor.js?v=9"></script>
 </body>
 </html>

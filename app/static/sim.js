@@ -6,6 +6,7 @@ import { LABELS, extractEntries, resolveChannels, bindingKey } from "./mapping.j
 const $ = (id) => document.getElementById(id);
 const rad = (d) => (d * Math.PI) / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fmt = (x, n = 3) => (Number.isFinite(x) ? x.toFixed(n) : "—");
 const num = (x) => {
   if (typeof x === "number") return Number.isFinite(x) ? x : null;
   if (x == null || typeof x === "object") return null;
@@ -57,9 +58,18 @@ const state = {
   axisCandidates: [],
   demoTimer: null,
   samples: 0,
+  entries: [],
+  lastPayload: null,
+  lastChosen: null,
+  desired: null,
+  trace: [],
 };
 
 let scene, camera, renderer, controls, robotRoot, resizeObs, animating;
+let resizeView = () => {};
+let desiredMarker = null;
+let trailLine = null;
+const trailMaterial = new THREE.LineBasicMaterial({ color: 0x69e0ba, transparent: true, opacity: 0.85 });
 
 function text(id, value) {
   const node = $(id);
@@ -74,15 +84,26 @@ function setTitle(name) {
   node.hidden = !label;
 }
 
+function setFocusStatus(message) {
+  text("sim-focus-status", message);
+}
+
 function setMode(mode) {
   state.mode = mode;
   if (state.demoTimer) {
     clearTimeout(state.demoTimer);
     state.demoTimer = null;
   }
-  text("sim-mode", ({ live: "LIVE", demo: "DEMO", stop: "STOP" }[mode] || mode));
-  $("sim-host")?.classList.toggle("is-live", mode === "live");
-  $("sim-host")?.classList.toggle("is-demo", mode === "demo");
+  const label = { live: "LIVE", demo: "DEMO", stop: "STOP" }[mode] || mode;
+  text("sim-mode", label);
+  text("sim-focus-mode", label);
+  for (const id of ["sim-host", "sim-focus-dialog"]) {
+    $(id)?.classList.toggle("is-live", mode === "live");
+    $(id)?.classList.toggle("is-demo", mode === "demo");
+  }
+  if (mode === "live") setFocusStatus("LIVE 수신 대기");
+  else if (mode === "demo") setFocusStatus("데모 동작");
+  else setFocusStatus("정지 · 마지막 자세 유지");
   if (mode === "demo") demoLoop();
 }
 
@@ -119,7 +140,15 @@ function ensureScene() {
   scene.add(grid);
   robotRoot = new THREE.Group();
   scene.add(robotRoot);
-  const resize = () => {
+  desiredMarker = new THREE.Group();
+  desiredMarker.visible = false;
+  desiredMarker.add(new THREE.AxesHelper(0.12));
+  desiredMarker.add(new THREE.Mesh(
+    new THREE.SphereGeometry(0.012),
+    new THREE.MeshBasicMaterial({ color: 0xf1b35e }),
+  ));
+  scene.add(desiredMarker);
+  resizeView = () => {
     const w = view.clientWidth;
     const h = view.clientHeight;
     if (!w || !h) return;
@@ -127,14 +156,19 @@ function ensureScene() {
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
   };
-  resizeObs = new ResizeObserver(resize);
+  resizeObs = new ResizeObserver(resizeView);
   resizeObs.observe(view);
-  resize();
+  resizeView();
   if (!animating) {
     animating = true;
     const tick = (now) => {
       requestAnimationFrame(tick);
       stepMotion(now);
+      if (state.tcpNode) {
+        const actual = actualPose();
+        if (actual) addTrace(actual.p);
+      }
+      if ($("sim-focus-dialog")?.open) refreshKpis();
       controls?.update();
       renderer?.render(scene, camera);
     };
@@ -148,6 +182,9 @@ function clearRobot() {
   state.chain = [];
   state.tcpNode = null;
   state.motion.active = false;
+  state.desired = null;
+  if (desiredMarker) desiredMarker.visible = false;
+  clearTrace();
   robotRoot?.clear();
   setTitle("");
 }
@@ -172,6 +209,7 @@ function setPose(q, { snap = false } = {}) {
     state.motion.active = false;
     state.displayAngles = to;
     applyPose(to);
+    syncSliders();
     return;
   }
   state.motion.from = state.displayAngles.slice();
@@ -193,6 +231,7 @@ function stepMotion(now) {
     state.displayAngles = state.motion.to.slice();
     applyPose(state.displayAngles);
   }
+  syncSliders();
 }
 
 function actualPose() {
@@ -253,11 +292,21 @@ function buildRobot(defs) {
   parent.add(flange);
   const tool = new THREE.Group();
   flange.add(tool);
+  tool.add(new THREE.AxesHelper(0.12));
   state.tcpNode = tool;
+  updateToolOffset();
   state.angles = Array(6).fill(0);
   state.displayAngles = Array(6).fill(0);
   state.targetAngles = Array(6).fill(0);
+  state.chain.forEach((joint, i) => {
+    const slider = $(`sim-slide-${i}`);
+    if (!slider) return;
+    slider.min = String((joint.lower * 180) / Math.PI);
+    slider.max = String((joint.upper * 180) / Math.PI);
+  });
+  clearTrace();
   applyPose(state.angles);
+  syncSliders();
 }
 
 function styleParts(parts) {
@@ -429,32 +478,212 @@ function jointsFromFrame(payload) {
   return values.every(Number.isFinite) ? values : null;
 }
 
-function ingest(payload) {
+function frameRotation() {
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(
+    rad(num($("sim-frame-roll")?.value) ?? 0),
+    rad(num($("sim-frame-pitch")?.value) ?? 0),
+    rad(num($("sim-frame-yaw")?.value) ?? 0),
+    "ZYX",
+  ));
+}
+
+function frameTransform(position, quaternion) {
+  const rotation = frameRotation();
+  const moved = position.clone().applyQuaternion(rotation).add(new THREE.Vector3(
+    (num($("sim-frame-x")?.value) ?? 0) / 1000,
+    (num($("sim-frame-y")?.value) ?? 0) / 1000,
+    (num($("sim-frame-z")?.value) ?? 0) / 1000,
+  ));
+  return { p: moved, q: quaternion ? rotation.clone().multiply(quaternion) : null };
+}
+
+function updateToolOffset() {
+  if (!state.tcpNode) return;
+  state.tcpNode.position.set(
+    (num($("sim-tool-x")?.value) ?? 0) / 1000,
+    (num($("sim-tool-y")?.value) ?? 0) / 1000,
+    (num($("sim-tool-z")?.value) ?? 0) / 1000,
+  );
+}
+
+function syncSliders() {
+  for (let i = 0; i < 6; i += 1) {
+    const degrees = ((state.displayAngles[i] ?? 0) * 180) / Math.PI;
+    const label = $(`sim-jval-${i}`);
+    if (label) label.textContent = `${degrees.toFixed(1)}°`;
+    const slider = $(`sim-slide-${i}`);
+    if (slider && document.activeElement !== slider) slider.value = String(degrees);
+  }
+}
+
+function refreshKpis() {
+  const pose = actualPose();
+  if (!pose) return;
+  text("sim-kpi-x", fmt(pose.p.x, 3));
+  text("sim-kpi-y", fmt(pose.p.y, 3));
+  text("sim-kpi-z", fmt(pose.p.z, 3));
+  const euler = new THREE.Euler().setFromQuaternion(pose.q, $("sim-euler-order")?.value || "XYZ");
+  text("sim-kpi-rx", fmt((euler.x * 180) / Math.PI, 1));
+  text("sim-kpi-ry", fmt((euler.y * 180) / Math.PI, 1));
+  text("sim-kpi-rz", fmt((euler.z * 180) / Math.PI, 1));
+  text("sim-tcp-err", state.desired?.p ? `${fmt(pose.p.distanceTo(state.desired.p) * 1000, 1)} mm` : "—");
+}
+
+function setDesired(position, quaternion) {
+  if (!position) {
+    state.desired = null;
+    if (desiredMarker) desiredMarker.visible = false;
+    return;
+  }
+  state.desired = { p: position.clone(), q: quaternion ? quaternion.clone() : null };
+  if (!desiredMarker) return;
+  desiredMarker.visible = true;
+  desiredMarker.position.copy(position);
+  desiredMarker.quaternion.copy(quaternion || new THREE.Quaternion());
+}
+
+function clearTrace() {
+  state.trace = [];
+  if (!trailLine || !scene) return;
+  scene.remove(trailLine);
+  trailLine.geometry.dispose();
+  trailLine = null;
+}
+
+function addTrace(point) {
+  if (!scene || !point) return;
+  const last = state.trace.at(-1);
+  if (last && last.distanceTo(point) < 0.004) return;
+  state.trace.push(point.clone());
+  if (state.trace.length > 500) state.trace.shift();
+  if (state.trace.length < 2) return;
+  if (trailLine) {
+    scene.remove(trailLine);
+    trailLine.geometry.dispose();
+  }
+  trailLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(state.trace), trailMaterial);
+  scene.add(trailLine);
+}
+
+function renderAudit(chosen) {
+  const node = $("sim-map-audit");
+  if (!node) return;
+  node.textContent = LABELS.map((key) => {
+    const entry = chosen?.[key];
+    const binding = state.axisBindings[key];
+    const rendered = entry
+      ? `${entry.path} = ${entry.value}`
+      : (binding ? `구독 ${axisLabel(binding)} · 값 없음` : "미매핑");
+    return `${key.padEnd(2)} : ${rendered}`;
+  }).join("\n");
+}
+
+function renderChannelTable() {
+  const body = $("sim-data-table");
+  if (!body || !$("sim-focus-dialog")?.open) return;
+  const filter = ($("sim-data-filter")?.value || "").trim().toLowerCase();
+  const rows = state.entries
+    .filter((entry) => !filter || entry.path.toLowerCase().includes(filter) || String(entry.value).toLowerCase().includes(filter))
+    .slice(0, 200);
+  body.replaceChildren();
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.textContent = state.entries.length ? "일치하는 채널 없음" : "데이터 수신 대기";
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+  for (const entry of rows) {
+    const tr = document.createElement("tr");
+    const path = document.createElement("td");
+    const value = document.createElement("td");
+    path.textContent = entry.path;
+    path.title = entry.path;
+    value.textContent = String(entry.value);
+    tr.append(path, value);
+    body.appendChild(tr);
+  }
+}
+
+function setModelNote(info) {
+  const node = $("sim-model-note");
+  if (!node) return;
+  if (!info) {
+    node.textContent = "";
+    return;
+  }
+  const source = info.kinematicsSource === "urdf"
+    ? `URDF ${info.urdf?.fileName || ""}`.trim()
+    : (info.kinematicsSource === "suggested" ? "추정 관절축" : "");
+  const warning = (info.warnings || []).filter(Boolean).slice(0, 2).join(" ");
+  node.textContent = [source, info.cadFile, warning].filter(Boolean).join(" · ");
+}
+
+function targetQuaternion(pose) {
+  if (!$("sim-use-orient")?.checked || !pose.slice(3, 6).every(Number.isFinite)) return null;
+  const scale = $("sim-angle-unit")?.value === "rad" ? 1 : Math.PI / 180;
+  const order = $("sim-euler-order")?.value || "XYZ";
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(...pose.slice(3, 6).map((value) => value * scale), order));
+}
+
+function driveFromState() {
+  const payload = state.lastPayload;
   if (!payload) return;
-  const entries = extractEntries(payload);
-  if (state.samples === 0 || state.samples % 12 === 0) fillMapOptions(entries);
-  state.samples += 1;
-  if (state.mode !== "live") return;
-  const { chosen } = resolveChannels(entries, state.mappings, state.axisBindings);
-  const values = LABELS.map((k) => chosen[k]?.value ?? null);
+  text("sim-channel-count", String(state.entries.length));
+  text("sim-stamp", String(payload.frame?.timestamp || "—").slice(0, 24));
+  const { chosen } = resolveChannels(state.entries, state.mappings, state.axisBindings);
+  state.lastChosen = chosen;
+  renderAudit(chosen);
+  renderChannelTable();
+  const values = LABELS.map((key) => chosen[key]?.value ?? null);
   const pose = values.slice(0, 6);
   let joints = values.slice(6);
   if (!joints.every(Number.isFinite)) joints = jointsFromFrame(payload) || joints;
   const jointOK = joints.every(Number.isFinite);
   const positionOK = pose.slice(0, 3).every(Number.isFinite);
+  const orientOK = pose.slice(3, 6).every(Number.isFinite);
+  const scale = $("sim-pos-unit")?.value === "m" ? 1 : 0.001;
+  if (positionOK) {
+    const received = ["X", "Y", "Z"].map((axis, index) => `${axis} ${fmt(pose[index], 1)}`).join("  ");
+    const rotation = orientOK ? `   Rx ${fmt(pose[3], 1)} Ry ${fmt(pose[4], 1)} Rz ${fmt(pose[5], 1)}` : "";
+    text("sim-rx-tcp", received + rotation);
+    const target = frameTransform(
+      new THREE.Vector3(...pose.slice(0, 3).map((value) => value * scale)),
+      targetQuaternion(pose),
+    );
+    setDesired(target.p, target.q);
+  } else {
+    text("sim-rx-tcp", "TCP XYZ 없음");
+    setDesired(null, null);
+  }
   const online = payload.frame?.online !== false;
-  if (!online || !state.chain.length) return;
-  const mode = driveSelect();
-  if (jointOK && (mode === "joint" || mode === "auto")) {
-    setPose(jointValuesToRad(joints));
-    return;
+  if (state.mode === "live" && online && state.chain.length) {
+    const mode = driveSelect();
+    if (jointOK && (mode === "joint" || mode === "auto")) {
+      setPose(jointValuesToRad(joints));
+      setFocusStatus("실제 Joint 6축 구동");
+    } else if (positionOK && (mode === "tcp" || mode === "auto")) {
+      const result = inverseKinematics(state.desired.p, state.desired.q);
+      if (result.q) setPose(result.q);
+      setFocusStatus(`TCP 역기구학 · 잔차 ${fmt((result.error || 0) * 1000, 1)} mm`);
+    } else {
+      setFocusStatus("Joint 6개 또는 TCP XYZ를 찾지 못했습니다.");
+    }
+  } else if (state.mode === "live" && !online) {
+    setFocusStatus("구독 OFFLINE · 마지막 자세 유지");
   }
-  if (positionOK && (mode === "tcp" || mode === "auto")) {
-    const scale = $("sim-pos-unit")?.value === "m" ? 1 : 0.001;
-    const targetP = new THREE.Vector3(...pose.slice(0, 3).map((v) => v * scale));
-    const result = inverseKinematics(targetP, null);
-    if (result.q) setPose(result.q);
-  }
+  refreshKpis();
+}
+
+function ingest(payload) {
+  if (!payload) return;
+  state.lastPayload = payload;
+  state.entries = extractEntries(payload);
+  if (state.samples === 0 || state.samples % 12 === 0) fillMapOptions(state.entries);
+  state.samples += 1;
+  driveFromState();
 }
 
 function demoLoop() {
@@ -478,7 +707,11 @@ async function load(packageId) {
   state.samples = 0;
   state.axisBindings = {};
   state.axisCandidates = [];
+  state.entries = [];
+  state.lastPayload = null;
+  state.lastChosen = null;
   state.mappings = Object.fromEntries(LABELS.map((k) => [k, "auto"]));
+  setModelNote(null);
   setMode("stop");
   $("sim-host")?.removeAttribute("hidden");
   if (!packageId) {
@@ -492,6 +725,7 @@ async function load(packageId) {
     state.info = info;
     state.axisBindings = info.axisBindings || {};
     state.axisCandidates = info.axisCandidates || [];
+    setModelNote(info);
     const drive = $("sim-drive");
     if (drive) drive.value = info.driveDefault || "tcp";
     fillMapOptions();
@@ -511,20 +745,187 @@ async function load(packageId) {
 function unload() {
   state.packageId = null;
   state.info = null;
+  state.entries = [];
+  state.lastPayload = null;
+  focusClose();
+  setModelNote(null);
   setMode("stop");
   clearRobot();
 }
 
-function bindUi() {
-  $("sim-live")?.addEventListener("click", () => setMode("live"));
-  $("sim-demo")?.addEventListener("click", () => {
-    if (state.available) setMode("demo");
+function focusOpen() {
+  const dialog = $("sim-focus-dialog");
+  const view = $("sim-viewport");
+  const stage = $("sim-focus-stage");
+  const drawer = $("sim-drawer");
+  const drawerSlot = $("sim-focus-drawer");
+  if (!dialog || !view || !stage) return;
+  ensureScene();
+  if (!dialog.open) dialog.showModal();
+  stage.appendChild(view);
+  if (drawer && drawerSlot) drawerSlot.appendChild(drawer);
+  const note = $("sim-stage-note");
+  if (note) note.hidden = false;
+  $("sim-host")?.classList.add("is-focused");
+  document.documentElement.classList.add("sim-modal-open");
+  setFocusButton(true);
+  renderChannelTable();
+  requestAnimationFrame(() => requestAnimationFrame(resizeView));
+}
+
+function focusClose() {
+  const dialog = $("sim-focus-dialog");
+  const view = $("sim-viewport");
+  const stage = $("sim-stage");
+  const drawer = $("sim-drawer");
+  const drawerHome = $("sim-drawer-home");
+  if (view && stage && view.parentElement !== stage) stage.appendChild(view);
+  if (drawer && drawerHome && drawer.parentElement !== drawerHome) drawerHome.appendChild(drawer);
+  const note = $("sim-stage-note");
+  if (note) note.hidden = true;
+  $("sim-host")?.classList.remove("is-focused");
+  document.documentElement.classList.remove("sim-modal-open");
+  setFocusButton(false);
+  if (dialog?.open) dialog.close();
+  requestAnimationFrame(resizeView);
+}
+
+function setFocusButton(open) {
+  const button = $("sim-focus");
+  if (!button) return;
+  button.classList.toggle("is-open", open);
+  button.setAttribute("aria-pressed", open ? "true" : "false");
+  button.setAttribute("aria-label", open ? "시뮬레이션 축소" : "시뮬레이션 확대");
+  button.title = open ? "축소" : "확대";
+}
+
+function onManualJoint(index, value) {
+  if (!state.chain.length) {
+    const slider = $(`sim-slide-${index}`);
+    if (slider) slider.value = String(((state.displayAngles[index] ?? 0) * 180) / Math.PI);
+    return;
+  }
+  setMode("stop");
+  const pose = state.displayAngles.slice();
+  while (pose.length < 6) pose.push(0);
+  pose[index] = rad(Number(value));
+  setPose(pose, { snap: true });
+  setFocusStatus("수동 관절");
+  refreshKpis();
+}
+
+function buildSliders() {
+  const root = $("sim-joint-sliders");
+  if (!root || root.childElementCount) return;
+  for (let i = 0; i < 6; i += 1) {
+    const row = document.createElement("label");
+    row.className = "sim-joint";
+    const head = document.createElement("span");
+    head.className = "sim-joint-head";
+    const name = document.createElement("span");
+    name.textContent = `J${i + 1}`;
+    const val = document.createElement("b");
+    val.id = `sim-jval-${i}`;
+    val.textContent = "0.0°";
+    head.append(name, val);
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.id = `sim-slide-${i}`;
+    slider.min = "-180";
+    slider.max = "180";
+    slider.step = "0.1";
+    slider.value = "0";
+    slider.addEventListener("input", () => onManualJoint(i, slider.value));
+    row.append(head, slider);
+    root.appendChild(row);
+  }
+}
+
+function alignTcp() {
+  const chosen = state.lastChosen || {};
+  if (!["X", "Y", "Z"].every((key) => Number.isFinite(chosen[key]?.value)) || !actualPose()) {
+    setFocusStatus("정합 불가: TCP XYZ가 매핑되어 있어야 합니다.");
+    return;
+  }
+  const scale = $("sim-pos-unit")?.value === "m" ? 1 : 0.001;
+  const raw = new THREE.Vector3(chosen.X.value, chosen.Y.value, chosen.Z.value).multiplyScalar(scale);
+  raw.applyQuaternion(frameRotation());
+  const offset = actualPose().p.clone().sub(raw).multiplyScalar(1000);
+  ["sim-frame-x", "sim-frame-y", "sim-frame-z"].forEach((id, index) => {
+    const input = $(id);
+    if (input) input.value = offset.getComponent(index).toFixed(2);
   });
-  $("sim-stop")?.addEventListener("click", () => setMode("stop"));
+  if (state.lastPayload) driveFromState();
+  setFocusStatus("현재 자세 기준으로 TCP 위치 평행이동을 맞췄습니다.");
+}
+
+function redrive() {
+  updateToolOffset();
+  if (state.lastPayload) driveFromState();
+  else refreshKpis();
+}
+
+function bindUi() {
+  buildSliders();
+  const goLive = () => setMode("live");
+  const goDemo = () => {
+    if (state.available) setMode("demo");
+  };
+  const goStop = () => setMode("stop");
+  $("sim-live")?.addEventListener("click", goLive);
+  $("sim-focus-live")?.addEventListener("click", goLive);
+  $("sim-demo")?.addEventListener("click", goDemo);
+  $("sim-focus-demo")?.addEventListener("click", goDemo);
+  $("sim-stop")?.addEventListener("click", goStop);
+  $("sim-focus-stop")?.addEventListener("click", goStop);
   $("sim-fit")?.addEventListener("click", () => fitCamera());
+  $("sim-focus-fit")?.addEventListener("click", () => fitCamera());
+  $("sim-focus")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if ($("sim-focus-dialog")?.open) focusClose();
+    else focusOpen();
+  });
+  $("sim-focus-close")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    focusClose();
+  });
+  $("sim-focus-dialog")?.addEventListener("close", () => {
+    if ($("sim-viewport")?.parentElement?.id === "sim-focus-stage") focusClose();
+  });
+  const dialog = $("sim-focus-dialog");
+  let backdropDown = false;
+  dialog?.addEventListener("pointerdown", (event) => {
+    backdropDown = event.target === dialog;
+  });
+  dialog?.addEventListener("click", (event) => {
+    if (backdropDown && event.target === dialog) focusClose();
+    backdropDown = false;
+  });
+  $("sim-home")?.addEventListener("click", () => {
+    if (!state.chain.length) return;
+    setMode("stop");
+    setPose(Array(6).fill(0), { snap: true });
+    setFocusStatus("J1~J6 = 0°");
+    refreshKpis();
+  });
+  $("sim-clear-trace")?.addEventListener("click", clearTrace);
+  $("sim-align-tcp")?.addEventListener("click", alignTcp);
+  $("sim-data-filter")?.addEventListener("input", renderChannelTable);
+  for (const id of ["sim-tool-x", "sim-tool-y", "sim-tool-z", "sim-frame-roll", "sim-frame-pitch", "sim-frame-yaw", "sim-frame-x", "sim-frame-y", "sim-frame-z"]) {
+    $(id)?.addEventListener("input", redrive);
+  }
+  for (const id of ["sim-angle-unit", "sim-euler-order", "sim-use-orient", "sim-drive", "sim-pos-unit", "sim-joint-unit"]) {
+    $(id)?.addEventListener("change", redrive);
+  }
+  for (let i = 0; i < 6; i += 1) {
+    $(`sim-sign-${i}`)?.addEventListener("change", redrive);
+    $(`sim-zero-${i}`)?.addEventListener("change", redrive);
+  }
   LABELS.forEach((name) => {
     $(`sim-map-${name}`)?.addEventListener("change", (event) => {
       state.mappings[name] = event.target.value;
+      if (state.lastPayload) driveFromState();
     });
   });
 }

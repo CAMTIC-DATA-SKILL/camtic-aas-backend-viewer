@@ -18,9 +18,9 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# 프로젝트 루트에 .env 파일을 만들고 AASX_DATA_DIR 등을 설정 (필수: AASX_DATA_DIR=data/aasx)
+# 프로젝트 루트에 .env 파일을 만들고 DATA_ROOT 등을 설정 (비우면 data/ 아래 트리)
 
-# (선택) 테스트용 샘플 AASX 생성 → AASX_DATA_DIR
+# (선택) 테스트용 샘플 AASX 생성 → DATA_ROOT/packages/{id}/package.aasx
 python -m scripts.create_sample_aasx
 
 # 서버 실행 (호스트/포트 등은 .env 설정을 따름)
@@ -55,12 +55,24 @@ chmod +x scripts/install-service.sh scripts/uninstall-service.sh
 ## 설정 (.env)
 
 모든 설정은 레포 루트의 `.env` 에서 읽으며, 코드에서는 `config.py` 의 `settings` 만 참조합니다.
-OS 환경 변수가 이미 설정되어 있으면 `.env` 값보다 우선합니다. 상대 경로는 레포 루트 기준입니다.
+OS 환경 변수가 이미 설정되어 있으면 `.env` 값보다 우선합니다.
+`DATA_ROOT` 의 상대 경로는 레포 루트 기준이고, 그 아래 저장 경로는 `DATA_ROOT` 기준입니다. 비우면 `data/` 아래 fallback 을 씁니다.
+
+패키지 하나는 `PACKAGES_DIR/{package_id}/` 입니다. AASX 는 `PACKAGE_AASX_NAME`, OPC-UA 산출물은 `PACKAGE_OPCUA_DIR`, STEP 과 GLB 는 `PACKAGE_CAD_DIR`, USD 는 `PACKAGE_USD_DIR`, 패키지 매핑은 `PACKAGE_CONFIG_DIR/mapping.json` 입니다.
 
 | 변수 | 설명 | 기본값 |
 | --- | --- | --- |
-| `AASX_DATA_DIR` | AASX 파일 폴더 | **필수** |
-| `ARTIFACTS_DIR` | OPC-UA 산출물 폴더 | `AASX_DATA_DIR`의 형제 `artifacts` |
+| `DATA_ROOT` | 저장 루트. HDD 로 옮길 때 이 값만 마운트 지점으로 바꿉니다. | `data` |
+| `PACKAGES_DIR` | 패키지 폴더 | `packages` |
+| `ARCHIVE_DIR` | 교체된 AASX 를 둘 폴더 | `archive` |
+| `SITE_CONFIG_DIR` | 현장 설정 폴더 | `config` |
+| `OPCUA_CATALOG_DIR` | `catalog.json` / `catalog.local.json` | `config/opcua` |
+| `MAPPINGS_DIR` | 저장소 기본 AAS↔OPC-UA 매핑 | `config/mappings` |
+| `PACKAGE_AASX_NAME` | 패키지 폴더 안의 AASX 파일 이름 | `package.aasx` |
+| `PACKAGE_OPCUA_DIR` | 패키지 폴더 안의 OPC-UA 산출물 폴더 | `opcua` |
+| `PACKAGE_CAD_DIR` | 패키지 폴더 안의 STEP/GLB 폴더 | `cad` |
+| `PACKAGE_USD_DIR` | 패키지 폴더 안의 USD 폴더 | `usd` |
+| `PACKAGE_CONFIG_DIR` | 패키지 폴더 안의 설정 폴더 | `config` |
 | `SERVER_HOST` | 바인딩 주소 | `127.0.0.1` |
 | `SERVER_PORT` | 포트 | `8000` |
 | `SERVER_RELOAD` | 코드 변경 시 자동 재시작 (개발용) | `false` |
@@ -99,7 +111,7 @@ uvicorn, BaSyx SDK 로그도 같은 형식으로 콘솔과 로그 파일에 함�
 
 ### OPC-UA 산출물
 
-업로드(또는 최초 로드) 시 패키지별로 `ARTIFACTS_DIR/{package_id}/` 아래에 다음이 생성됩니다.
+업로드(또는 최초 로드) 시 패키지별로 `PACKAGES_DIR/{package_id}/PACKAGE_OPCUA_DIR/` 아래에 다음이 생성됩니다.
 
 | 파일 | 설명 |
 | --- | --- |
@@ -113,9 +125,9 @@ uvicorn, BaSyx SDK 로그도 같은 형식으로 콘솔과 로그 파일에 함�
 
 `middleware_gateway_opc_ua` 와 같은 `asyncua` 래퍼입니다. 유틸리티 → OPC-UA에서 카탈로그 서버를 고르고 접속하면 주소 공간을 탐색하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 뷰어의 **현장 값 불러오기**와 **실시간 그래프**도 같은 NodeId를 씁니다. 미들웨어가 `engineering.csv` 와 같은 식별자를 올리면 별도 매핑 파일이 필요 없습니다. 현장 네임스페이스만 다르면 catalog 의 `nodeIdNamespace` 로 `ns=1` 을 바꿉니다.
 
-서버 목록은 `data/opcua/catalog.json` 에 두고, 현장 주소는 git에 올리지 않는 `data/opcua/catalog.local.json` 으로 덮어씁니다. 카탈로그에는 엔드포인트·보안 정책·(선택) `aasId`·`nodeIdNamespace` 만 적습니다.
+서버 목록은 `OPCUA_CATALOG_DIR/catalog.json` 에 두고, 현장 주소는 git에 올리지 않는 같은 폴더의 `catalog.local.json` 으로 덮어씁니다. 카탈로그에는 엔드포인트·보안 정책·(선택) `aasId`·`nodeIdNamespace` 만 적습니다.
 
-PLC 태그처럼 NodeId 자체가 다를 때만 `data/mappings/{package_id}.json` (또는 산출물 폴더의 `mapping.json`)을 씁니다. 유틸리티의 **선택 패키지 AAS 매핑 읽기**는 매핑 파일이 있으면 그 테이블을, 없으면 `engineering.csv` 를 읽습니다.
+PLC 태그처럼 NodeId 자체가 다를 때만 `MAPPINGS_DIR/{package_id}.json` 또는 패키지 `PACKAGE_CONFIG_DIR/mapping.json` 을 씁니다. 유틸리티의 **선택 패키지 AAS 매핑 읽기**는 매핑 파일이 있으면 그 테이블을, 없으면 `engineering.csv` 를 읽습니다.
 
 서버 시작 시 카탈로그 기본 서버에 자동 접속하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 뷰어 **실시간 그래프**는 `GET /api/opcua/packages/{package_id}/live` 로 이 캐시만 읽습니다. 웹 뷰어는 현장 OPC-UA 구독을 걸거나 해제하지 않습니다.
 

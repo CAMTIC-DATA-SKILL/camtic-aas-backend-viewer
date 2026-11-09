@@ -5,7 +5,10 @@ from app.opcua_mapping import rewrite_node_id
 from app.repository import load_package
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-AASX_DIR = REPO_ROOT / "data" / "aasx"
+
+
+def _aasx(package_id: str) -> Path:
+    return REPO_ROOT / "data" / "packages" / package_id / "package.aasx"
 
 
 def test_path_identifier_strips_slash_and_special_chars():
@@ -25,9 +28,9 @@ def test_string_node_id_is_unique_and_rewritable():
 
 
 def test_hh7_and_doosan_joint_position_node_ids_do_not_collide():
-    hh7 = load_package(AASX_DIR / "HH7_AAS_Template_v0.2.aasx", "HH7_AAS_Template_v0.2")
+    hh7 = load_package(_aasx("HH7_AAS_Template_v0.2"), "HH7_AAS_Template_v0.2")
     doosan = load_package(
-        AASX_DIR / "Doosan_M1509_AAS_Template_v0.2.aasx",
+        _aasx("Doosan_M1509_AAS_Template_v0.2"),
         "Doosan_M1509_AAS_Template_v0.2",
     )
     assert hh7.error is None

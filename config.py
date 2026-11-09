@@ -171,12 +171,148 @@ def load_manufacturing_config() -> ManufacturingConfig:
     return cfg
 
 
+def _under_root(root: Path, raw: str) -> Path:
+    path = Path(raw)
+    if path.is_absolute():
+        return path.resolve()
+    return (root / path).resolve()
+
+
+def _single_segment(label: str, raw: str) -> str:
+    name = raw.strip()
+    if (
+        not name
+        or name in {".", ".."}
+        or "/" in name
+        or "\\" in name
+        or "\x00" in name
+        or Path(name).name != name
+    ):
+        raise RuntimeError(f"{label} 은(는) 폴더·파일 이름 하나여야 합니다: {raw!r}")
+    return name
+
+
+def _package_id(package_id: str) -> str:
+    if (
+        not package_id
+        or package_id in {".", ".."}
+        or "/" in package_id
+        or "\\" in package_id
+        or "\x00" in package_id
+    ):
+        raise ValueError(f"잘못된 패키지 id: {package_id}")
+    return package_id
+
+
+@dataclass(frozen=True)
+class StorageLayout:
+    """DATA_ROOT 아래 저장 트리.
+
+    packages/{package_id}/package.aasx 가 기준 원본이고,
+    같은 폴더의 opcua·cad·usd·config 에 산출물과 작업 사본을 둔다.
+    디렉터리 이름은 .env 에서 오고, 비어 있으면 data/ 기준 fallback 을 쓴다.
+    """
+
+    root: Path
+    packages_dir: Path
+    archive_dir: Path
+    site_config_dir: Path
+    opcua_catalog_dir: Path
+    mappings_dir: Path
+    package_aasx_name: str
+    package_opcua_dir: str
+    package_cad_dir: str
+    package_usd_dir: str
+    package_config_dir: str
+
+    def ensure_tree(self) -> None:
+        for path in (
+            self.packages_dir,
+            self.archive_dir,
+            self.site_config_dir,
+            self.opcua_catalog_dir,
+            self.mappings_dir,
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+
+    def package_dir(self, package_id: str) -> Path:
+        return self.packages_dir / _package_id(package_id)
+
+    def aasx_path(self, package_id: str) -> Path:
+        return self.package_dir(package_id) / self.package_aasx_name
+
+    def opcua_dir(self, package_id: str) -> Path:
+        return self.package_dir(package_id) / self.package_opcua_dir
+
+    def cad_dir(self, package_id: str) -> Path:
+        return self.package_dir(package_id) / self.package_cad_dir
+
+    def usd_dir(self, package_id: str) -> Path:
+        return self.package_dir(package_id) / self.package_usd_dir
+
+    def package_config_path(self, package_id: str) -> Path:
+        return self.package_dir(package_id) / self.package_config_dir
+
+
+def resolve_storage(
+    root: Path,
+    *,
+    packages_dir: str = "packages",
+    archive_dir: str = "archive",
+    site_config_dir: str = "config",
+    opcua_catalog_dir: str = "config/opcua",
+    mappings_dir: str = "config/mappings",
+    package_aasx_name: str = "package.aasx",
+    package_opcua_dir: str = "opcua",
+    package_cad_dir: str = "cad",
+    package_usd_dir: str = "usd",
+    package_config_dir: str = "config",
+) -> StorageLayout:
+    """상대 경로는 root 아래에 붙인다. 기본 이름은 DATA_ROOT=data 일 때의 fallback 이다."""
+    aasx_name = _single_segment("PACKAGE_AASX_NAME", package_aasx_name)
+    if not aasx_name.lower().endswith(".aasx"):
+        raise RuntimeError(f"PACKAGE_AASX_NAME 은 .aasx 로 끝나야 합니다: {aasx_name!r}")
+    resolved = root.resolve()
+    return StorageLayout(
+        root=resolved,
+        packages_dir=_under_root(resolved, packages_dir),
+        archive_dir=_under_root(resolved, archive_dir),
+        site_config_dir=_under_root(resolved, site_config_dir),
+        opcua_catalog_dir=_under_root(resolved, opcua_catalog_dir),
+        mappings_dir=_under_root(resolved, mappings_dir),
+        package_aasx_name=aasx_name,
+        package_opcua_dir=_single_segment("PACKAGE_OPCUA_DIR", package_opcua_dir),
+        package_cad_dir=_single_segment("PACKAGE_CAD_DIR", package_cad_dir),
+        package_usd_dir=_single_segment("PACKAGE_USD_DIR", package_usd_dir),
+        package_config_dir=_single_segment("PACKAGE_CONFIG_DIR", package_config_dir),
+    )
+
+
+def load_storage() -> StorageLayout:
+    """DATA_ROOT 와 하위 경로는 환경 변수가 있으면 그 값을 쓰고, 없으면 data/ fallback 을 쓴다."""
+    root = _path(os.environ.get("DATA_ROOT", "").strip() or "data")
+    overrides: dict[str, str] = {}
+    for env_name, field in (
+        ("PACKAGES_DIR", "packages_dir"),
+        ("ARCHIVE_DIR", "archive_dir"),
+        ("SITE_CONFIG_DIR", "site_config_dir"),
+        ("OPCUA_CATALOG_DIR", "opcua_catalog_dir"),
+        ("MAPPINGS_DIR", "mappings_dir"),
+        ("PACKAGE_AASX_NAME", "package_aasx_name"),
+        ("PACKAGE_OPCUA_DIR", "package_opcua_dir"),
+        ("PACKAGE_CAD_DIR", "package_cad_dir"),
+        ("PACKAGE_USD_DIR", "package_usd_dir"),
+        ("PACKAGE_CONFIG_DIR", "package_config_dir"),
+    ):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            overrides[field] = raw
+    return resolve_storage(root, **overrides)
+
+
 @dataclass(frozen=True)
 class Settings:
-    aasx_data_dir: Path
-    artifacts_dir: Path
-    digital_twin_step_dir: Path
-    digital_twin_usd_dir: Path
+    storage: StorageLayout
 
     server_host: str
     server_port: int
@@ -195,14 +331,7 @@ class Settings:
 
 def load_settings() -> Settings:
     log_dir = os.environ.get("LOG_DIR", "").strip()
-    aasx_data_dir = _path(_str("AASX_DATA_DIR"))
-    artifacts_raw = os.environ.get("ARTIFACTS_DIR", "").strip()
-    artifacts_dir = _path(artifacts_raw) if artifacts_raw else (aasx_data_dir.parent / "artifacts")
-    data_root = aasx_data_dir.parent
-    step_raw = os.environ.get("DIGITAL_TWIN_STEP_DIR", "").strip()
-    usd_raw = os.environ.get("DIGITAL_TWIN_USD_DIR", "").strip()
-    digital_twin_step_dir = _path(step_raw) if step_raw else (data_root / "digital_twin_step")
-    digital_twin_usd_dir = _path(usd_raw) if usd_raw else (data_root / "digital_twin_usd")
+    storage = load_storage()
     opcua = OpcUaConfig(
         server_id=_str("OPCUA_SERVER_ID", "default"),
         endpoint=_str("OPCUA_ENDPOINT", "opc.tcp://127.0.0.1:4840"),
@@ -232,10 +361,7 @@ def load_settings() -> Settings:
         )
 
     return Settings(
-        aasx_data_dir=aasx_data_dir,
-        artifacts_dir=artifacts_dir,
-        digital_twin_step_dir=digital_twin_step_dir,
-        digital_twin_usd_dir=digital_twin_usd_dir,
+        storage=storage,
         server_host=_str("SERVER_HOST", "127.0.0.1"),
         server_port=_int("SERVER_PORT", 8000),
         server_reload=_bool("SERVER_RELOAD", False),
