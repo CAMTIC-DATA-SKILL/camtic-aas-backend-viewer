@@ -29,6 +29,7 @@ class OpcUaSession:
         self._subscribe_package_id: Optional[str] = None
         self._subscribe_package_ids: list[str] = []
         self._restore_task: asyncio.Task[None] | None = None
+        self._reconnect_lock = asyncio.Lock()
         # 수신 알림을 _latest 외에 받을 곳 (예: TimescaleDB 기록). 콜백 안에서 오래 걸리면 안 된다.
         self._listeners: list[Callable[[DataChange, datetime], None]] = []
 
@@ -38,6 +39,10 @@ class OpcUaSession:
     @property
     def is_connected(self) -> bool:
         return self._client is not None and self._client.is_connected
+
+    @property
+    def is_transport_connected(self) -> bool:
+        return self._client is not None and self._client.is_transport_connected
 
     @property
     def catalog_server_id(self) -> Optional[str]:

@@ -332,6 +332,41 @@ def opcua_catalog() -> dict[str, Any]:
         raise _http_error(exc) from exc
 
 
+def _transport_down(session: OpcUaSession) -> bool:
+    return not session.is_transport_connected
+
+
+async def reconnect_catalog(session: OpcUaSession, repository: AasxRepository) -> dict[str, Any]:
+    """현장 값 요청용. 소켓이 살아 있고 구독이 있으면 그대로 두고, 아니면 카탈로그로 다시 붙인다."""
+    async with session._reconnect_lock:
+        if not _transport_down(session) and session.subscribed_node_ids:
+            return session.status()
+        if _transport_down(session):
+            logger.info("OPC-UA 연결이 없어 카탈로그로 재접속합니다.")
+            if session.is_connected:
+                await session.disconnect()
+        else:
+            logger.info("OPC-UA 세션은 살아 있고 구독이 없어 카탈로그 구독을 다시 겁니다.")
+        return await connect_from_catalog(
+            session,
+            repository,
+            use_default_server=True,
+        )
+
+
+@router.post("/reconnect")
+async def opcua_reconnect(
+    session: OpcUaSession = Depends(get_opcua),
+    repository: AasxRepository = Depends(get_repository),
+) -> dict[str, Any]:
+    try:
+        return await reconnect_catalog(session, repository)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise _http_error(exc) from exc
+
+
 @router.post("/connect")
 async def opcua_connect(
     body: ConnectBody | None = None,

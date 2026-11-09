@@ -561,15 +561,25 @@ function startLiveRefresh() {
   tick();
 }
 
-async function tryLoadLiveValues({ silent = false } = {}) {
+async function tryLoadLiveValues({ silent = false, reconnect = false } = {}) {
   if (!state.packageId || !state.tree) return;
-  if (!silent) setLiveStatus("현장 값을 읽는 중...");
+  if (!silent) setLiveStatus(reconnect ? "OPC-UA 연결을 확인하는 중..." : "현장 값을 읽는 중...");
   try {
-    const status = await fetchJson("/api/opcua/status");
-    if (!status.connected) {
-      stopLiveRefresh();
-      setLiveStatus(silent ? "" : "OPC-UA에 먼저 접속하세요. 유틸리티 → OPC-UA", !silent);
-      return;
+    if (reconnect) {
+      const status = await fetchJson("/api/opcua/reconnect", { method: "POST" });
+      if (!status.connected) {
+        stopLiveRefresh();
+        setLiveStatus("OPC-UA 재연결에 실패했습니다.", true);
+        return;
+      }
+      if (!silent) setLiveStatus("현장 값을 읽는 중...");
+    } else {
+      const status = await fetchJson("/api/opcua/status");
+      if (!status.connected) {
+        stopLiveRefresh();
+        setLiveStatus(silent ? "" : "OPC-UA에 먼저 접속하세요. 유틸리티 → OPC-UA", !silent);
+        return;
+      }
     }
     applyLiveFrame(await pullLiveFrame());
     startLiveRefresh();
@@ -720,7 +730,7 @@ function openDocumentationUpload() {
 $("reload-btn").addEventListener("click", () => loadPackages(true));
 $("expand-btn").addEventListener("click", () => setAllCollapsed(false));
 $("collapse-btn").addEventListener("click", () => setAllCollapsed(true));
-$("live-btn").addEventListener("click", () => tryLoadLiveValues());
+$("live-btn").addEventListener("click", () => tryLoadLiveValues({ reconnect: true }));
 $("live-view-btn").addEventListener("click", () => setLiveView(!window.LiveDashboard?.isVisible()));
 $("live-json-btn").addEventListener("click", () => setLiveJsonView(!window.LiveDashboard?.isJsonVisible()));
 $("download-format").addEventListener("change", updateDownloadControls);

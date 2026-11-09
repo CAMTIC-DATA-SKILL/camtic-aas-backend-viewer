@@ -1,5 +1,9 @@
+import asyncio
+from types import SimpleNamespace
+
+from app.opc_ua.client.client import OpcUaClient
 from app.opc_ua.session import OpcUaSession
-from app.opcua_api import _tag_live_nodes, engineering_live_response, owns_live_subscription
+from app.opcua_api import _tag_live_nodes, engineering_live_response, owns_live_subscription, reconnect_catalog
 
 
 HH7 = "HH7_AAS_Template_v0.2"
@@ -95,3 +99,61 @@ def test_two_packages_read_one_cache_by_tag():
     assert result["values"][0]["value"] is True
     assert result["values"][0]["nodeId"] == tag
     assert len(session.latest_values()) == 2
+
+
+def _state(value: str):
+    return SimpleNamespace(value=value)
+
+
+def test_transport_connected_follows_socket_state():
+    client = OpcUaClient.__new__(OpcUaClient)
+    client._client = None
+    assert client.is_transport_connected is False
+    client._client = SimpleNamespace(uaclient=SimpleNamespace(state=_state("reconnecting")))
+    assert client.is_transport_connected is False
+    client._client.uaclient.state = _state("connected")
+    assert client.is_transport_connected is True
+
+
+def test_reconnect_catalog_keeps_a_live_subscription(monkeypatch):
+    async def fail_connect(*_args, **_kwargs):
+        raise AssertionError("live session should not reconnect")
+
+    monkeypatch.setattr("app.opcua_api.connect_from_catalog", fail_connect)
+    session = OpcUaSession()
+    session._client = SimpleNamespace(
+        is_connected=True,
+        is_transport_connected=True,
+        config=session._default_cfg,
+    )
+    session._subscribed = ["ns=2;s=J1"]
+
+    status = asyncio.run(reconnect_catalog(session, None))
+
+    assert status["connected"] is True
+    assert status["subscribedNodeIds"] == ["ns=2;s=J1"]
+
+
+def test_reconnect_catalog_drops_a_dead_session_and_uses_the_catalog(monkeypatch):
+    events = []
+
+    class Dead:
+        is_connected = True
+        is_transport_connected = False
+
+        async def disconnect(self):
+            events.append("disconnect")
+
+    async def fake_connect(_session, _repository, **kwargs):
+        events.append(kwargs["use_default_server"])
+        return {"connected": True}
+
+    monkeypatch.setattr("app.opcua_api.connect_from_catalog", fake_connect)
+    session = OpcUaSession()
+    session._client = Dead()
+
+    status = asyncio.run(reconnect_catalog(session, None))
+
+    assert status["connected"] is True
+    assert events == ["disconnect", True]
+    assert session._client is None

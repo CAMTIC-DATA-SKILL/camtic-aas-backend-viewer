@@ -73,6 +73,15 @@ class OpcUaClient:
     def is_connected(self) -> bool:
         return self._client is not None
 
+    @property
+    def is_transport_connected(self) -> bool:
+        """세션 객체가 아니라 소켓이 CONNECTED 인지. 재연결 중이면 False."""
+        raw = self._client
+        if raw is None:
+            return False
+        state = getattr(getattr(raw, "uaclient", None), "state", None)
+        return getattr(state, "value", None) == "connected"
+
     async def _build_client(self) -> Client:
         cfg = self._cfg
         client = Client(
