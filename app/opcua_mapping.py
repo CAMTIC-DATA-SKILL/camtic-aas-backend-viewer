@@ -7,8 +7,8 @@
 
 PLC 태그처럼 NodeId 자체가 다를 때만 매핑 파일을 쓴다.
 찾는 순서:
-1. `{artifacts}/{package_id}/mapping.json`  (현장 오버라이드)
-2. `{AASX_DATA_DIR}/../mappings/{package_id}.json`  (레포 기본 매핑)
+1. `{packages}/{package_id}/{PACKAGE_CONFIG_DIR}/mapping.json`  (패키지 오버라이드)
+2. `{MAPPINGS_DIR}/{package_id}.json`  (저장소 기본 매핑)
 """
 
 from __future__ import annotations
@@ -102,15 +102,16 @@ class AasOpcUaMapping:
         }
 
 
-def mapping_candidates(package_id: str, artifact_dir: Path) -> list[Path]:
+def mapping_candidates(package_id: str, package_dir: Path) -> list[Path]:
+    layout = settings.storage
     return [
-        artifact_dir / MAPPING_FILENAME,
-        settings.aasx_data_dir.parent / "mappings" / f"{package_id}.json",
+        package_dir / layout.package_config_dir / MAPPING_FILENAME,
+        layout.mappings_dir / f"{package_id}.json",
     ]
 
 
-def load_mapping(package_id: str, artifact_dir: Path) -> Optional[AasOpcUaMapping]:
-    for path in mapping_candidates(package_id, artifact_dir):
+def load_mapping(package_id: str, package_dir: Path) -> Optional[AasOpcUaMapping]:
+    for path in mapping_candidates(package_id, package_dir):
         if path.is_file():
             return _read_mapping(path, package_id)
     return None

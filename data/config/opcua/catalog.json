@@ -6,7 +6,10 @@
       "name": "Local OPC-UA",
       "endpoint": "opc.tcp://218.158.231.215:24840",
       "securityPolicy": "None",
-      "aasId": "urn:physical-ai:aas:hyundai:hh7:template:v0.2",
+      "aasIds": [
+        "urn:physical-ai:aas:hyundai:hh7:template:v0.2",
+        "urn:physical-ai:plc:aas:template:v0.4"
+      ],
       "nodeIdNamespace": 2
     }
   ]

@@ -6,17 +6,22 @@ from app.documentation import Attachment, apply_attachments
 from app.repository import AasxRepository
 from app.simulation import build_simulation_payload, has_robot_kinematics
 from app.step_mesh import convert_step_to_glb, glb_part_names
+from config import resolve_storage
 from scripts.create_sample_aasx import build_camtic_sample, write_aasx
 
-HH7_STEP = Path(__file__).resolve().parents[1] / "data/digital_twin_step/HH7_AAS_Template_v0.2/hh7_v3.step"
+HH7_STEP = (
+    Path(__file__).resolve().parents[1]
+    / "data/packages/HH7_AAS_Template_v0.2/cad/hh7_v3.step"
+)
 SIM_STEP = Path("/home/user/workspace/camtic-digital-simulator/assets/hh7_v3.step")
 
 
 def _repo(tmp_path: Path) -> tuple[AasxRepository, str]:
-    data_dir = tmp_path / "aasx"
-    data_dir.mkdir()
-    write_aasx(data_dir / "camtic_sample.aasx", *build_camtic_sample())
-    repo = AasxRepository(data_dir, tmp_path / "artifacts", tmp_path / "digital_twin_step", tmp_path / "digital_twin_usd")
+    layout = resolve_storage(tmp_path)
+    dest = layout.aasx_path("camtic_sample")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    write_aasx(dest, *build_camtic_sample())
+    repo = AasxRepository(layout)
     repo.reload()
     return repo, "camtic_sample"
 
@@ -59,7 +64,7 @@ def test_payload_uses_named_step_parts(tmp_path: Path):
     assert payload["meshUrl"] == f"/api/packages/{package_id}/simulation/mesh"
     assert payload["parts"][:7] == ["base_link", "link1", "link2", "link3", "link4", "link5", "link6"]
     assert len(payload["joints"]) == 6
-    assert (tmp_path / "digital_twin_step" / package_id / "hh7_v3.glb").is_file()
+    assert (repo.layout.cad_dir(package_id) / "hh7_v3.glb").is_file()
 
 
 def test_convert_preserves_link_names(tmp_path: Path):

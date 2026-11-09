@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from config import settings
 from app.opcua_api import _engineering_live_nodes
 from app.opcua_mapping import (
     apply_engineering,
@@ -30,7 +31,9 @@ def test_as_bool_and_robot_status():
 
 
 def test_load_and_apply_hyundai_mapping(tmp_path: Path):
-    (tmp_path / "mapping.json").write_text(
+    config_dir = tmp_path / settings.storage.package_config_dir
+    config_dir.mkdir()
+    (config_dir / "mapping.json").write_text(
         json.dumps(
             {
                 "packageId": "demo",
@@ -119,7 +122,9 @@ def test_artifact_override_wins(tmp_path: Path):
             }
         ],
     }
-    (tmp_path / "mapping.json").write_text(json.dumps(override), encoding="utf-8")
+    config_dir = tmp_path / settings.storage.package_config_dir
+    config_dir.mkdir()
+    (config_dir / "mapping.json").write_text(json.dumps(override), encoding="utf-8")
     mapping = load_mapping("demo", tmp_path)
     assert mapping is not None
     assert mapping.bindings[0].node_id == "ns=2;s=demo"

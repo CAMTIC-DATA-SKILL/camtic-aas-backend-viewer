@@ -5,6 +5,7 @@ from asyncua import ua
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from config import settings
 from utils.log_setup import LogSetup
 
 from .live_frame import frame_from_mapping
@@ -67,16 +68,16 @@ def get_package(package_id: str, repository: AasxRepository = Depends(get_reposi
 
 
 def owns_live_subscription(session: OpcUaSession, package_id: str) -> bool:
-    """LIVE 캐시는 현재 구독 중인 패키지에만 붙인다."""
-    subscribed = (session.subscribe_package_id or "").strip()
-    return bool(subscribed) and subscribed == package_id
+    """LIVE 캐시는 이 연결에 등록된 AASX 들이 함께 읽는다."""
+    return package_id in session.subscribe_package_ids
 
 
 def _live_mismatch_message(session: OpcUaSession) -> str:
-    subscribed = (session.subscribe_package_id or "").strip()
+    subscribed = session.subscribe_package_ids
     if not subscribed:
         return "구독 중인 AAS 패키지가 없습니다."
-    return f"LIVE는 '{subscribed}' 구독입니다. 이 패키지 값은 표시하지 않습니다."
+    names = ", ".join(subscribed)
+    return f"LIVE는 {names} 구독입니다. 이 패키지 값은 표시하지 않습니다."
 
 
 def empty_live_response(
@@ -93,6 +94,7 @@ def empty_live_response(
         "message": _live_mismatch_message(session),
         "catalogServerId": session.catalog_server_id,
         "subscribePackageId": session.subscribe_package_id,
+        "subscribePackageIds": session.subscribe_package_ids,
         "subscribedNodeIds": session.subscribed_node_ids,
         "latestCount": len(session.latest_values()),
         "values": [],
@@ -155,6 +157,7 @@ def mapping_live_response(
         "mappingSource": mapping.source,
         "catalogServerId": session.catalog_server_id,
         "subscribePackageId": session.subscribe_package_id,
+        "subscribePackageIds": session.subscribe_package_ids,
         "subscribedNodeIds": session.subscribed_node_ids,
         "latestCount": len(session.latest_values()),
         "values": mapped,
@@ -189,6 +192,7 @@ def engineering_live_response(
         "subscribeMatch": True,
         "catalogServerId": session.catalog_server_id,
         "subscribePackageId": session.subscribe_package_id,
+        "subscribePackageIds": session.subscribe_package_ids,
         "subscribedNodeIds": session.subscribed_node_ids,
         "latestCount": len(session.latest_values()),
         "values": mapped,
@@ -202,11 +206,15 @@ def engineering_live_response(
 
 
 def _require_mapping(package: AasxPackage, repository: AasxRepository) -> AasOpcUaMapping:
-    mapping = load_mapping(package.id, repository.artifact_dir(package.id))
+    mapping = load_mapping(package.id, repository.package_dir(package.id))
     if mapping is None:
+        mapping_path = settings.storage.mappings_dir / f"{package.id}.json"
         raise HTTPException(
             status_code=404,
-            detail="AAS↔OPC-UA 매핑이 없습니다. data/mappings/{package_id}.json 을 추가하세요.",
+            detail=(
+                "AAS↔OPC-UA 매핑이 없습니다. "
+                f"패키지 {settings.storage.package_config_dir}/mapping.json 또는 {mapping_path} 에 두세요."
+            ),
         )
     return mapping
 
@@ -231,21 +239,72 @@ def _engineering_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> lis
     return selected
 
 
+def _shell_name(aas_path: str, package_id: str) -> str:
+    parts = [part for part in (aas_path or "").split("/") if part]
+    if package_id and parts and parts[0] == package_id:
+        parts = parts[1:]
+    return parts[0] if parts else ""
+
+
+def _tag_node_id(address: str) -> str:
+    text = address.strip()
+    if text.startswith("ns="):
+        return text
+    return f"ns=1;s={text}"
+
+
+def _tag_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> list[dict[str, Any]]:
+    """IOInterfaceMapping 의 PLC 주소를 OPC-UA 태그로, AASPath 를 값이 붙을 속성으로 쓴다.
+
+    캐시 키는 태그 주소 하나다. 같은 D2010 을 여러 파일이 가리켜도 구독과 저장은 한 번이다.
+    """
+    grouped: dict[str, dict[str, dict[str, Any]]] = {}
+    for node in nodes:
+        submodel, path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
+        if submodel != "IOInterfaceMapping" or "." not in path:
+            continue
+        group, leaf = path.rsplit(".", 1)
+        if leaf not in {"PLCAddress", "AASPath"}:
+            continue
+        grouped.setdefault(group, {})[leaf] = node
+
+    selected: list[dict[str, Any]] = []
+    for fields in grouped.values():
+        address = str((fields.get("PLCAddress") or {}).get("templateValue") or "").strip()
+        target = str((fields.get("AASPath") or {}).get("templateValue") or "").strip().strip("/")
+        sample = fields.get("PLCAddress") or {}
+        shell = _shell_name(str(sample.get("aasPath") or ""), package_id)
+        if not address or not target or not shell:
+            continue
+        selected.append(
+            {
+                "nodeId": _tag_node_id(address),
+                "browseName": target.rsplit("/", 1)[-1],
+                "displayName": address,
+                "aasPath": f"/{package_id}/{shell}/{target}",
+            }
+        )
+    return selected
+
+
 def _package_live_source(
     package: AasxPackage,
     repository: AasxRepository,
     field_namespace: Optional[int] = None,
 ) -> tuple[str, list[dict[str, Any]], list[str], str]:
     aas_id = str(package.shells[0].id) if package.shells else ""
-    nodes = _engineering_live_nodes(
-        load_engineering_nodes(repository.artifact_dir(package.id), variables_only=True),
-        package.id,
-    )
-    node_ids = [
-        rewrite_node_id(str(node["nodeId"]), field_namespace)
-        for node in nodes
-        if node.get("nodeId")
+    records = load_engineering_nodes(repository.artifact_dir(package.id), variables_only=True)
+    nodes = [
+        *_engineering_live_nodes(records, package.id),
+        *_tag_live_nodes(records, package.id),
     ]
+    node_ids = list(
+        dict.fromkeys(
+            rewrite_node_id(str(node["nodeId"]), field_namespace)
+            for node in nodes
+            if node.get("nodeId")
+        )
+    )
     return "engineering", nodes, node_ids, aas_id
 
 
@@ -332,9 +391,14 @@ async def connect_from_catalog(
         security_mode=security_mode or (server.security_mode if server else None),
         catalog_server_id=server.id if server else "",
     )
-    resolved_aas = (aas_id or (server.aas_id if server else "") or "").strip()
+    resolved_ids = [item.strip() for item in (server.aas_ids if server else ()) if item.strip()]
+    if aas_id and aas_id.strip():
+        resolved_ids = [aas_id.strip()]
     subscribe_error = await subscribe_engineering(
-        session, repository, aas_id=resolved_aas, package_id=(package_id or "").strip()
+        session,
+        repository,
+        aas_ids=resolved_ids,
+        package_id=(package_id or "").strip(),
     )
     status = session.status()
     try:
@@ -345,7 +409,7 @@ async def connect_from_catalog(
         "OPC-UA 토픽 등록: endpoint=%s server=%s aasId=%s count=%d",
         status.get("endpoint"),
         status.get("catalogServerId") or "-",
-        resolved_aas or "-",
+        ",".join(resolved_ids) or "-",
         len(status.get("subscribedNodeIds") or []),
     )
     if subscribe_error:
@@ -358,46 +422,68 @@ async def subscribe_engineering(
     session: OpcUaSession,
     repository: AasxRepository,
     aas_id: str = "",
+    aas_ids: Optional[list[str]] = None,
     package_id: str = "",
 ) -> Optional[str]:
-    package = None
-    if aas_id:
-        package = repository.find_by_shell_id(aas_id)
-        if package is None:
-            return f"AAS id '{aas_id}' 에 해당하는 패키지가 없습니다."
+    """한 OPC-UA 연결에 여러 AASX 를 등록한다. 같은 태그 주소는 한 번만 구독한다."""
+    requested = [item.strip() for item in (aas_ids or []) if item and item.strip()]
+    if aas_id.strip() and aas_id.strip() not in requested:
+        requested.append(aas_id.strip())
+
+    packages: list[AasxPackage] = []
+    missing: list[str] = []
+    if requested:
+        for item in requested:
+            package = repository.find_by_shell_id(item)
+            if package is None:
+                missing.append(item)
+            elif all(package.id != current.id for current in packages):
+                packages.append(package)
     elif package_id:
         package = repository.get(package_id)
         if package is None:
             return f"Package '{package_id}' not found"
-    if package is None:
+        packages.append(package)
+    if not packages:
+        if missing:
+            return f"AAS id '{missing[0]}' 에 해당하는 패키지가 없습니다."
         logger.info("OPC-UA 토픽 등록 생략: aasId/packageId 가 없습니다.")
         return None
-    source, nodes, node_ids, _aas_id = _package_live_source(
-        package, repository, field_namespace=_field_namespace(session)
-    )
-    if not node_ids:
-        logger.info(
-            "OPC-UA 라이브 구독 생략: package=%s (RobotKinematicState/RobotOperationalState 변수 없음)",
-            package.id,
+
+    field_namespace = _field_namespace(session)
+    node_ids: list[str] = []
+    package_ids: list[str] = []
+    for package in packages:
+        _source, _nodes, ids, _aas_id = _package_live_source(
+            package, repository, field_namespace=field_namespace
         )
-        return None
+        if not ids:
+            logger.info("OPC-UA 라이브 구독 항목 없음: package=%s", package.id)
+            continue
+        package_ids.append(package.id)
+        node_ids.extend(ids)
+    node_ids = list(dict.fromkeys(node_ids))
+    if not node_ids:
+        detail = f"AAS id '{missing[0]}' 에 해당하는 패키지가 없습니다." if missing else None
+        return detail
+
     try:
-        await session.ensure_subscribed(node_ids, package_id=package.id)
+        await session.subscribe(node_ids, package_ids=package_ids)
     except Exception as exc:
         logger.warning(
-            "OPC-UA 토픽 등록 실패: aasId=%s package=%s (%s)",
-            aas_id or "-",
-            package.id,
+            "OPC-UA 토픽 등록 실패: packages=%s (%s)",
+            package_ids,
             exc,
         )
         return str(exc)
     logger.info(
-        "OPC-UA 토픽 등록: aasId=%s package=%s count=%d source=%s",
-        aas_id or "-",
-        package.id,
+        "OPC-UA 토픽 등록: packages=%s count=%d uniqueTags=%d",
+        package_ids,
         len(node_ids),
-        source,
+        len(node_ids),
     )
+    if missing:
+        return f"AAS id '{missing[0]}' 에 해당하는 패키지가 없습니다."
     return None
 
 
@@ -561,7 +647,7 @@ async def opcua_package_read(
 ) -> dict[str, Any]:
     artifact_dir = repository.artifact_dir(package.id)
     if source == "auto":
-        source = "mapping" if load_mapping(package.id, artifact_dir) else "engineering"
+        source = "mapping" if load_mapping(package.id, repository.package_dir(package.id)) else "engineering"
     if source == "engineering":
         return await _read_engineering_nodes(package, artifact_dir, session)
     if source != "mapping":

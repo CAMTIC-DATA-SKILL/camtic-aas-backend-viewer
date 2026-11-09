@@ -3,8 +3,8 @@ from pathlib import Path
 from app.repository import load_package
 from app.simulation import axis_bindings_from_package
 
-HH7 = Path(__file__).resolve().parents[1] / "data/aasx/HH7_AAS_Template_v0.2.aasx"
-DOOSAN = Path(__file__).resolve().parents[1] / "data/aasx/Doosan_M1509_AAS_Template_v0.2.aasx"
+HH7 = Path(__file__).resolve().parents[1] / "data/packages/HH7_AAS_Template_v0.2/package.aasx"
+DOOSAN = Path(__file__).resolve().parents[1] / "data/packages/Doosan_M1509_AAS_Template_v0.2/package.aasx"
 
 
 def test_hh7_bindings_use_kinematic_submodel_properties():

@@ -11,6 +11,7 @@ import pyecma376_2
 from basyx.aas import model
 from basyx.aas.adapter import aasx
 
+from config import StorageLayout
 from utils.log_setup import LogSetup
 
 logger = LogSetup.get_logger(__name__)
@@ -58,6 +59,11 @@ class AasxPackage:
     def concept_descriptions(self) -> list[model.ConceptDescription]:
         return [o for o in self.objects if isinstance(o, model.ConceptDescription)]
 
+    @property
+    def file_name(self) -> str:
+        """디스크 파일은 package.aasx 로 고정하고, 화면과 다운로드에는 패키지 id 를 쓴다."""
+        return f"{self.id}.aasx"
+
     def get_identifiable(self, identifier: str, type_: type[_I]) -> Optional[_I]:
         obj = self.objects.get(identifier)
         return obj if isinstance(obj, type_) else None
@@ -104,31 +110,24 @@ def load_package(path: Path, package_id: str) -> AasxPackage:
 
 
 class AasxRepository:
-    """지정된 폴더의 모든 ``*.aasx`` 파일을 메모리에 로드하여 보관한다."""
+    """``packages/{package_id}/package.aasx`` 를 메모리에 로드하여 보관한다."""
 
-    def __init__(
-        self,
-        data_dir: Path,
-        artifacts_dir: Optional[Path] = None,
-        digital_twin_step_dir: Optional[Path] = None,
-        digital_twin_usd_dir: Optional[Path] = None,
-    ):
-        self.data_dir = data_dir
-        parent = data_dir.parent
-        self.artifacts_dir = artifacts_dir or (parent / "artifacts")
-        self.digital_twin_step_dir = digital_twin_step_dir or (parent / "digital_twin_step")
-        self.digital_twin_usd_dir = digital_twin_usd_dir or (parent / "digital_twin_usd")
+    def __init__(self, layout: StorageLayout):
+        self.layout = layout
         self._packages: dict[str, AasxPackage] = {}
         self._lock = threading.Lock()
 
+    def package_dir(self, package_id: str) -> Path:
+        return self.layout.package_dir(package_id)
+
     def artifact_dir(self, package_id: str) -> Path:
-        return self.artifacts_dir / package_id
+        return self.layout.opcua_dir(package_id)
 
     def digital_twin_dir(self, kind: str, package_id: str) -> Path:
         if kind == "step":
-            return self.digital_twin_step_dir / package_id
+            return self.layout.cad_dir(package_id)
         if kind == "usd":
-            return self.digital_twin_usd_dir / package_id
+            return self.layout.usd_dir(package_id)
         raise ValueError(f"디지털 트윈 저장 종류가 아닙니다: {kind}")
 
     def write_digital_twin_file(self, package_id: str, kind: str, filename: str, content: bytes) -> Path:
@@ -161,32 +160,20 @@ class AasxRepository:
         )
         return matches[0] if matches else None
 
-    def delete_digital_twin_files(self, package_id: str) -> None:
-        for root in (self.digital_twin_step_dir, self.digital_twin_usd_dir):
-            target = root / package_id
-            if target.is_dir():
-                shutil.rmtree(target)
-                logger.info("Deleted digital twin directory %s", target)
-
     def reload(self) -> None:
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.artifacts_dir.mkdir(parents=True, exist_ok=True)
-        self.digital_twin_step_dir.mkdir(parents=True, exist_ok=True)
-        self.digital_twin_usd_dir.mkdir(parents=True, exist_ok=True)
-        paths = sorted(
-            p for p in self.data_dir.iterdir() if p.is_file() and p.suffix.lower() == ".aasx"
-        )
-        if not paths:
-            logger.warning("No .aasx files found in %s", self.data_dir)
-
+        self.layout.ensure_tree()
         packages: dict[str, AasxPackage] = {}
-        for path in paths:
-            package_id = path.stem
-            suffix = 2
-            while package_id in packages:
-                package_id = f"{path.stem}-{suffix}"
-                suffix += 1
-            packages[package_id] = load_package(path, package_id)
+        entries = sorted(
+            (path for path in self.layout.packages_dir.iterdir() if path.is_dir()),
+            key=lambda path: path.name,
+        )
+        for entry in entries:
+            aasx_path = entry / self.layout.package_aasx_name
+            if not aasx_path.is_file():
+                continue
+            packages[entry.name] = load_package(aasx_path, entry.name)
+        if not packages:
+            logger.warning("No AASX packages found in %s", self.layout.packages_dir)
 
         with self._lock:
             self._packages = packages
@@ -210,33 +197,17 @@ class AasxRepository:
             return None
 
     def save_upload(self, filename: str, content: bytes) -> AasxPackage:
-        """AASX 바이트를 데이터 폴더에 저장하고 로드한다. 동일 파일명은 덮어쓴다."""
+        """AASX 바이트를 ``packages/{id}/package.aasx`` 에 저장하고 로드한다. 같은 id 는 덮어쓴다."""
         safe_name = _sanitize_aasx_filename(filename)
-        target = self.data_dir / safe_name
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        package_id = safe_name[:-5]
+        target = self.layout.aasx_path(package_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
         logger.info("Saved uploaded AASX to %s (%d bytes)", target, len(content))
 
-        package_id = target.stem
         package = load_package(target, package_id)
         with self._lock:
-            # 동일 stem 충돌 시 기존 id 재사용, 없으면 stem 그대로
-            existing_id = next(
-                (pid for pid, pkg in self._packages.items() if pkg.path.resolve() == target.resolve()),
-                None,
-            )
-            if existing_id is not None:
-                package.id = existing_id
-                self._packages[existing_id] = package
-            else:
-                # stem 이 다른 경로의 패키지 id 와 겹치면 접미사
-                candidate = package_id
-                suffix = 2
-                while candidate in self._packages and self._packages[candidate].path.resolve() != target.resolve():
-                    candidate = f"{package_id}-{suffix}"
-                    suffix += 1
-                package.id = candidate
-                self._packages[candidate] = package
+            self._packages[package_id] = package
             return package
 
     def rewrite(self, package: AasxPackage) -> AasxPackage:
@@ -265,22 +236,17 @@ class AasxRepository:
         return reloaded
 
     def delete(self, package_id: str) -> bool:
-        """패키지 AASX 파일과 OPC-UA 산출물 폴더를 삭제하고 메모리에서 제거한다."""
+        """패키지 폴더(AASX, 산출물, CAD/USD, 패키지 설정)를 삭제하고 메모리에서 제거한다."""
         with self._lock:
             package = self._packages.get(package_id)
             if package is None:
                 return False
-            path = package.path
             del self._packages[package_id]
 
-        if path.is_file():
-            path.unlink()
-            logger.info("Deleted AASX file %s", path)
-        artifact_dir = self.artifact_dir(package_id)
-        if artifact_dir.is_dir():
-            shutil.rmtree(artifact_dir)
-            logger.info("Deleted artifacts directory %s", artifact_dir)
-        self.delete_digital_twin_files(package_id)
+        package_dir = self.layout.package_dir(package_id)
+        if package_dir.is_dir():
+            shutil.rmtree(package_dir)
+            logger.info("Deleted package directory %s", package_dir)
         return True
 
 

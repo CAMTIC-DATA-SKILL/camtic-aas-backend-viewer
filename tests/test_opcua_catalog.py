@@ -79,6 +79,7 @@ def test_load_catalog_and_local_override(tmp_path: Path):
     assert field is not None
     assert field.endpoint == "opc.tcp://10.0.0.9:4840"
     assert field.aas_id == "urn:example:aas:hyundai:hh7:pickplace:01"
+    assert field.aas_ids == ("urn:example:aas:hyundai:hh7:pickplace:01",)
     assert catalog.get("lab").aas_id == "urn:example:aas:lab"
     assert catalog.get("lab").node_id_namespace == 2
     assert catalog.get("field").node_id_namespace is None
@@ -93,6 +94,33 @@ def test_missing_catalog_falls_back_to_env(tmp_path: Path):
     assert catalog.source == "env"
     assert catalog.default_server_id == "env-default"
     assert catalog.servers[0].endpoint == "opc.tcp://edge:4840"
+
+
+def test_catalog_aas_ids_keep_order_and_drop_duplicates(tmp_path: Path):
+    (tmp_path / "catalog.json").write_text(
+        json.dumps(
+            {
+                "servers": [
+                    {
+                        "id": "line",
+                        "endpoint": "opc.tcp://10.0.0.8:4840",
+                        "aasId": "urn:example:aas:plc",
+                        "aasIds": [
+                            "urn:example:aas:hh7",
+                            "urn:example:aas:plc",
+                            "urn:example:aas:hh7",
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    server = load_catalog(tmp_path, fallback=_cfg()).default_server()
+    assert server is not None
+    assert server.aas_ids == ("urn:example:aas:hh7", "urn:example:aas:plc")
+    assert server.aas_id == "urn:example:aas:hh7"
+    assert server.to_dict()["aasIds"] == ["urn:example:aas:hh7", "urn:example:aas:plc"]
 
 
 def test_invalid_catalog_requires_id_and_endpoint(tmp_path: Path):

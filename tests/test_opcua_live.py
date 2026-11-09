@@ -1,5 +1,5 @@
 from app.opc_ua.session import OpcUaSession
-from app.opcua_api import engineering_live_response, owns_live_subscription
+from app.opcua_api import _tag_live_nodes, engineering_live_response, owns_live_subscription
 
 
 HH7 = "HH7_AAS_Template_v0.2"
@@ -60,5 +60,38 @@ def test_engineering_live_hides_cache_from_other_package():
     assert result["values"] == []
     assert result["frame"]["online"] is False
     assert result["subscribePackageId"] == HH7
+    assert result["subscribePackageIds"] == [HH7]
     assert HH7 in result["message"]
     assert result["latestCount"] == 1
+
+
+def test_two_packages_read_one_cache_by_tag():
+    session = _session_with_hh7_cache()
+    session._subscribe_package_ids = [HH7, "PLC_AAS_Template_v0.4 (1)"]
+    assert owns_live_subscription(session, HH7) is True
+    assert owns_live_subscription(session, "PLC_AAS_Template_v0.4 (1)") is True
+    assert owns_live_subscription(session, DOOSAN) is False
+
+    tag = "ns=2;s=D2010"
+    session._latest[tag] = {"nodeId": tag, "value": True, "status": "Good", "isGood": True}
+    package_id = "PLC_AAS_Template_v0.4 (1)"
+    nodes = _tag_live_nodes(
+        [
+            {
+                "aasPath": f"/{package_id}/PLC_AAS/IOInterfaceMapping/Map_D2010/PLCAddress",
+                "templateValue": "D2010",
+            },
+            {
+                "aasPath": f"/{package_id}/PLC_AAS/IOInterfaceMapping/Map_D2010/AASPath",
+                "templateValue": "Robot02_Delta/Handshake/GripWaitRequest",
+            },
+        ],
+        package_id,
+    )
+    result = engineering_live_response(nodes, session, package_id, field_namespace=2)
+    assert result["subscribeMatch"] is True
+    assert result["values"][0]["path"] == "Handshake.GripWaitRequest"
+    assert result["values"][0]["submodelIdShort"] == "Robot02_Delta"
+    assert result["values"][0]["value"] is True
+    assert result["values"][0]["nodeId"] == tag
+    assert len(session.latest_values()) == 2

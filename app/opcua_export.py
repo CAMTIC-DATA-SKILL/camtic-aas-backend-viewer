@@ -228,7 +228,7 @@ def build_node_records(package: AasxPackage) -> list[_NodeRecord]:
         _NodeRecord(
             node_id=root_id,
             browse_name=_safe_browse_name(package.id, "AASPackage"),
-            display_name=package.path.stem,
+            display_name=package.id,
             node_class="Object",
             data_type="",
             parent_node_id="i=85",  # Objects folder
@@ -496,7 +496,7 @@ def _build_syscfg(package: AasxPackage, namespace_uri: str, records: list[_NodeR
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "source": {
             "packageId": package.id,
-            "fileName": package.path.name,
+            "fileName": package.file_name,
             "aasStandard": "IEC 63278 / IDTA AAS V3",
             "opcUaCompanion": "OPC 30270 (I4AAS)",
         },

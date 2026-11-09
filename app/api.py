@@ -189,10 +189,10 @@ def _serialize_package(
             return FileResponse(
                 path=package.path,
                 media_type="application/asset-administration-shell-package",
-                filename=package.path.name,
+                filename=package.file_name,
                 headers={"X-Captured-Values": "0"},
             )
-        filename = f"{package.path.stem}_snapshot.aasx"
+        filename = f"{package.id}_snapshot.aasx"
         return Response(
             content=write_aasx_bytes(package, captured_store),
             media_type="application/asset-administration-shell-package",
@@ -205,7 +205,7 @@ def _serialize_package(
         )
 
     objects = captured_store if captured_store is not None else package.objects
-    stem = f"{package.path.stem}_snapshot" if captured else package.path.stem
+    stem = f"{package.id}_snapshot" if captured else package.id
     try:
         if file_format == "json":
             content = object_store_to_json(objects, indent=2, ensure_ascii=False)
