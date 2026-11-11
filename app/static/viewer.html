@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=34">
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -59,11 +59,11 @@
       <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
       <section class="sim-host" id="sim-host">
         <div class="sim-toolbar">
-          <span id="sim-mode" class="sim-badge">STOP</span>
-          <button type="button" id="sim-live">LIVE</button>
-          <button type="button" id="sim-demo">DEMO</button>
-          <button type="button" id="sim-stop">STOP</button>
-          <button type="button" id="sim-fit">맞춤</button>
+          <span id="sim-mode" class="sim-badge">LIVE</span>
+          <div class="sim-tabs" role="tablist" aria-label="렌더 보기">
+            <button type="button" role="tab" id="sim-tab-sim" aria-selected="true" aria-controls="sim-viewport">Simulation</button>
+            <button type="button" role="tab" id="sim-tab-ego" aria-selected="false" aria-controls="ego-viewport">Egocentric View</button>
+          </div>
         </div>
         <div class="sim-stage" id="sim-stage">
           <div class="sim-viewport" id="sim-viewport">
@@ -81,7 +81,29 @@
               <span>연두 선: 모델 TCP 궤적 · 주황 축: 수신 TCP</span>
             </div>
           </div>
-          <p class="sim-stage-note" id="sim-stage-note" hidden>확대 창에서 시뮬레이션을 보고 있습니다.</p>
+          <div class="ego-viewport" id="ego-viewport" data-mode="both" hidden>
+            <div class="ego-modes" id="ego-modes" role="tablist" aria-label="카메라 뷰 모드">
+              <button type="button" role="tab" data-ego-mode="both" aria-selected="true">RGB+Depth</button>
+              <button type="button" role="tab" data-ego-mode="rgb" aria-selected="false">RGB</button>
+              <button type="button" role="tab" data-ego-mode="depth" aria-selected="false">Depth</button>
+            </div>
+            <div class="ego-frame" id="ego-frame">
+              <img id="ego-stream" alt="장비 카메라 RGB+Depth 스트림">
+            </div>
+            <p class="ego-status" id="ego-status">카메라 스트림을 연결하는 중</p>
+            <div class="ego-offline" id="ego-offline" hidden>
+              <p>연결된 스트리밍 LIVE가 없습니다.</p>
+            </div>
+            <button type="button" id="ego-focus" class="sim-focus-btn" aria-pressed="false" aria-label="카메라 확대" title="확대">
+              <svg class="sim-icon-expand" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg class="sim-icon-shrink" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <p class="sim-stage-note" id="sim-stage-note" hidden>확대 창에서 보고 있습니다.</p>
         </div>
         <div id="sim-drawer-home">
         <details class="sim-drawer" id="sim-drawer">
@@ -264,13 +286,9 @@
     <header>
       <div class="live-title">
         <h2>장비 렌더 시뮬레이션</h2>
-        <span id="sim-focus-mode" class="sim-badge">STOP</span>
+        <span id="sim-focus-mode" class="sim-badge">LIVE</span>
       </div>
       <div class="sim-focus-actions">
-        <button type="button" id="sim-focus-live">LIVE</button>
-        <button type="button" id="sim-focus-demo">DEMO</button>
-        <button type="button" id="sim-focus-stop">STOP</button>
-        <button type="button" id="sim-focus-fit">맞춤</button>
         <button type="button" id="sim-focus-close" class="sim-close-btn" aria-label="닫기" title="닫기">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -348,6 +366,22 @@
     </div>
   </dialog>
 
+  <dialog id="ego-focus-dialog" class="sim-focus-dialog" aria-label="Egocentric View">
+    <div class="sim-focus-panel ego-focus-panel">
+      <header>
+        <h2>Egocentric View</h2>
+        <div class="sim-focus-actions">
+          <button type="button" id="ego-focus-close" class="sim-close-btn" aria-label="닫기" title="닫기">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div class="ego-focus-stage" id="ego-focus-stage"></div>
+    </div>
+  </dialog>
+
   <dialog id="live-json-dialog" class="live-json-dialog">
     <header>
       <div class="live-title">
@@ -367,7 +401,7 @@
   <script src="documentation.js?v=4"></script>
   <script src="live.js?v=8"></script>
   <script src="app.js?v=16"></script>
-  <script type="module" src="sim.js?v=14"></script>
+  <script type="module" src="sim.js?v=22"></script>
   <script src="tsdb-monitor.js?v=9"></script>
 </body>
 </html>

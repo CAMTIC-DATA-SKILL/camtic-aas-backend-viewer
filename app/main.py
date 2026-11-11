@@ -9,6 +9,7 @@ from config import Settings, settings
 from utils.log_setup import LogSetup
 
 from .api import router
+from .camera_proxy import router as camera_router
 from .manufacturing.alarms import AlarmEngine
 from .manufacturing.api import ManufacturingRuntime, router as manufacturing_router
 from .manufacturing.db import create_engine, create_sessionmaker
@@ -139,6 +140,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     )
     app.include_router(router)
     app.include_router(opcua_router)
+    app.include_router(camera_router)
     app.include_router(manufacturing_router)
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="viewer")
     return app

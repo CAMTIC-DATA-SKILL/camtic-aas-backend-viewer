@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from app.documentation import Attachment, apply_attachments
-from app.repository import AasxRepository
-from app.simulation import build_simulation_payload, has_robot_kinematics
+from app.repository import AasxRepository, load_package
+from app.simulation import build_simulation_payload, camera_stream_for_package, has_robot_kinematics
 from app.step_mesh import convert_step_to_glb, glb_part_names
 from config import resolve_storage
 from scripts.create_sample_aasx import build_camtic_sample, write_aasx
@@ -26,12 +26,27 @@ def _repo(tmp_path: Path) -> tuple[AasxRepository, str]:
     return repo, "camtic_sample"
 
 
+def test_camera_stream_is_only_attached_to_hh7_v03():
+    packages = Path(__file__).resolve().parents[1] / "data/packages"
+    found = False
+    for aasx in sorted(packages.glob("*/package.aasx")):
+        package = load_package(aasx, aasx.parent.name)
+        stream = camera_stream_for_package(package)
+        if aasx.parent.name == "Hyundai_HH7_AAS_Template_v0.3":
+            assert stream == "/api/camera/d455/stream.mjpg"
+            found = True
+        else:
+            assert stream is None, aasx.parent.name
+    assert found
+
+
 def test_sample_package_has_no_simulation_mesh(tmp_path: Path):
     repo, package_id = _repo(tmp_path)
     package = repo.get(package_id)
     payload = build_simulation_payload(package, repo)
     assert payload["hasMesh"] is False
     assert payload["meshUrl"] is None
+    assert payload["cameraStream"] is None
     assert payload["hasKinematics"] is False
     assert payload["joints"] == []
 

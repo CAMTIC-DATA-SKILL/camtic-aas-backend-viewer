@@ -557,9 +557,138 @@ li:not(.collapsed) > .row .caret::before { content: "▾"; }
 .sim-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 8px;
   flex-wrap: wrap;
 }
+.sim-tabs { display: flex; gap: 4px; }
+.sim-tabs button[hidden] { display: none; }
+.sim-tabs button {
+  padding: 4px 10px;
+  border: 1px solid #c4ccd6;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+}
+.sim-tabs button[aria-selected="true"] {
+  background: #1b2b45;
+  border-color: #1b2b45;
+  color: #fff;
+}
+.sim-tabs button[aria-selected="true"]:hover { background: #24385a; color: #fff; }
+.sim-host.is-ego #sim-drawer-home { display: none; }
+.ego-viewport {
+  position: relative;
+  height: 400px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d1c2a;
+}
+.ego-viewport[hidden] { display: none; }
+.ego-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.ego-viewport img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: #0d1c2a;
+}
+.ego-modes {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  max-width: calc(100% - 56px);
+  padding: 3px;
+  border: 1px solid #3c5571;
+  border-radius: 8px;
+  background: rgba(9, 21, 38, 0.82);
+}
+.ego-viewport .ego-modes button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #d5e6f5;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.ego-viewport .ego-modes button:hover { background: #31516d; color: #e7f1ff; }
+.ego-viewport .ego-modes button[aria-selected="true"] {
+  background: #e7f1ff;
+  color: #102033;
+}
+.ego-viewport .ego-modes button[aria-selected="true"]:hover {
+  background: #fff;
+  color: #102033;
+}
+.ego-status {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+  margin: 0;
+  max-width: calc(100% - 72px);
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(9, 21, 38, 0.78);
+  color: #bdd4e8;
+  font-size: 12px;
+}
+.ego-status[hidden] { display: none; }
+.ego-viewport.is-offline .ego-modes,
+.ego-viewport.is-offline .ego-frame,
+.ego-viewport.is-offline .ego-status,
+.ego-viewport.is-offline .sim-focus-btn { visibility: hidden; }
+.ego-offline {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #08101c;
+}
+.ego-offline[hidden] { display: none; }
+.ego-offline p {
+  margin: 0;
+  max-width: 280px;
+  padding: 18px 22px;
+  border: 1px solid #3c5571;
+  border-radius: 10px;
+  background: #13283c;
+  color: #e7f1ff;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-align: center;
+}
+.ego-focus-stage {
+  flex: 1;
+  min-height: 0;
+  background: #0d1c2a;
+}
+.sim-focus-dialog .ego-viewport { height: 100%; border-radius: 0; }
 .sim-toolbar button { padding: 4px 8px; font-size: 12px; }
 .sim-badge {
   display: inline-flex;

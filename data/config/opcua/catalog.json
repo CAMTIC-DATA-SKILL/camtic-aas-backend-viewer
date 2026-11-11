@@ -8,9 +8,10 @@
       "securityPolicy": "None",
       "aasIds": [
         "urn:physical-ai:aas:hyundai:hh7:template:v0.2",
-        "urn:physical-ai:plc:aas:template:v0.4"
+        "urn:physical-ai:plc:aas:template:v0.4",
+        "urn:physical-ai:aas:hyundai:hh7:template:v0.3"
       ],
-      "nodeIdNamespace": 2
+      "nodeIdNamespace": 1
     }
   ]
 }

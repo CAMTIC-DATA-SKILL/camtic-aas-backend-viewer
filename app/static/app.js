@@ -27,8 +27,7 @@ const state = {
   selectedRow: null,
   selectedNode: null,
   filter: "",
-  liveTimer: null,
-  liveGen: 0,
+  liveSource: null,
   statusUntil: 0,
 };
 
@@ -514,10 +513,9 @@ function setLiveStatus(message, isError = false) {
 }
 
 function stopLiveRefresh() {
-  state.liveGen += 1;
-  if (state.liveTimer) {
-    clearTimeout(state.liveTimer);
-    state.liveTimer = null;
+  if (state.liveSource) {
+    state.liveSource.close();
+    state.liveSource = null;
   }
 }
 
@@ -542,23 +540,29 @@ async function pullLiveFrame() {
 }
 
 function startLiveRefresh() {
-  const gen = (state.liveGen += 1);
-  if (state.liveTimer) {
-    clearTimeout(state.liveTimer);
-    state.liveTimer = null;
+  if (!state.packageId || !state.tree) {
+    stopLiveRefresh();
+    return;
   }
-  const tick = async () => {
-    if (state.liveGen !== gen || !state.packageId || !state.tree) return;
+  const path = `/api/opcua/packages/${encodeURIComponent(state.packageId)}/live/stream`;
+  if (state.liveSource && state.liveSource.readyState !== EventSource.CLOSED) {
+    if (new URL(state.liveSource.url).pathname === path) return;
+  }
+  stopLiveRefresh();
+  const source = new EventSource(path);
+  state.liveSource = source;
+  source.onmessage = (event) => {
+    if (state.liveSource !== source) return;
     try {
-      applyLiveFrame(await pullLiveFrame());
+      applyLiveFrame(JSON.parse(event.data));
     } catch (e) {
-      if (state.liveGen !== gen) return;
       setLiveStatus(e.message, true);
     }
-    if (state.liveGen !== gen) return;
-    state.liveTimer = setTimeout(tick, 500);
   };
-  tick();
+  source.onerror = () => {
+    if (state.liveSource !== source || source.readyState !== EventSource.CLOSED) return;
+    setLiveStatus("실시간 연결이 끊겼습니다.", true);
+  };
 }
 
 async function tryLoadLiveValues({ silent = false, reconnect = false } = {}) {

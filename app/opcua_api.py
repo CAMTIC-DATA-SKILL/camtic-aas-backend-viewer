@@ -1,8 +1,11 @@
+import asyncio
+import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from asyncua import ua
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config import settings
@@ -239,51 +242,29 @@ def _engineering_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> lis
     return selected
 
 
-def _shell_name(aas_path: str, package_id: str) -> str:
-    parts = [part for part in (aas_path or "").split("/") if part]
-    if package_id and parts and parts[0] == package_id:
-        parts = parts[1:]
-    return parts[0] if parts else ""
-
-
-def _tag_node_id(address: str) -> str:
-    text = address.strip()
-    if text.startswith("ns="):
-        return text
-    return f"ns=1;s={text}"
-
-
-def _tag_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> list[dict[str, Any]]:
-    """IOInterfaceMapping 의 PLC 주소를 OPC-UA 태그로, AASPath 를 값이 붙을 속성으로 쓴다.
-
-    캐시 키는 태그 주소 하나다. 같은 D2010 을 여러 파일이 가리켜도 구독과 저장은 한 번이다.
-    """
-    grouped: dict[str, dict[str, dict[str, Any]]] = {}
+def _mapped_engineering_nodes(nodes: list[dict[str, Any]], package_id: str) -> list[dict[str, Any]]:
+    """IOInterfaceMapping 의 AASPath 가 가리키는 속성을 그 속성의 engineering NodeId 로 구독한다."""
+    targets: set[str] = set()
     for node in nodes:
         submodel, path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
-        if submodel != "IOInterfaceMapping" or "." not in path:
+        if submodel != "IOInterfaceMapping" or path.rsplit(".", 1)[-1] != "AASPath":
             continue
-        group, leaf = path.rsplit(".", 1)
-        if leaf not in {"PLCAddress", "AASPath"}:
-            continue
-        grouped.setdefault(group, {})[leaf] = node
+        target = str(node.get("templateValue") or "").strip().strip("/")
+        if target:
+            targets.add(target)
+    if not targets:
+        return []
 
     selected: list[dict[str, Any]] = []
-    for fields in grouped.values():
-        address = str((fields.get("PLCAddress") or {}).get("templateValue") or "").strip()
-        target = str((fields.get("AASPath") or {}).get("templateValue") or "").strip().strip("/")
-        sample = fields.get("PLCAddress") or {}
-        shell = _shell_name(str(sample.get("aasPath") or ""), package_id)
-        if not address or not target or not shell:
+    for node in nodes:
+        if not node.get("nodeId"):
             continue
-        selected.append(
-            {
-                "nodeId": _tag_node_id(address),
-                "browseName": target.rsplit("/", 1)[-1],
-                "displayName": address,
-                "aasPath": f"/{package_id}/{shell}/{target}",
-            }
-        )
+        submodel, path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
+        if not submodel or not path or submodel == "IOInterfaceMapping":
+            continue
+        full = f"{submodel}/{path.replace('.', '/')}"
+        if full in targets:
+            selected.append(node)
     return selected
 
 
@@ -296,7 +277,7 @@ def _package_live_source(
     records = load_engineering_nodes(repository.artifact_dir(package.id), variables_only=True)
     nodes = [
         *_engineering_live_nodes(records, package.id),
-        *_tag_live_nodes(records, package.id),
+        *_mapped_engineering_nodes(records, package.id),
     ]
     node_ids = list(
         dict.fromkeys(
@@ -650,16 +631,12 @@ def opcua_package_mapping(
     return _require_mapping(package, repository).to_dict()
 
 
-@router.get("/packages/{package_id}/live")
-def opcua_package_live(
-    package: AasxPackage = Depends(get_package),
-    repository: AasxRepository = Depends(get_repository),
-    session: OpcUaSession = Depends(get_opcua),
+def _package_live_payload(
+    package: AasxPackage,
+    repository: AasxRepository,
+    session: OpcUaSession,
 ) -> dict[str, Any]:
-    """구독 캐시만 읽는다. 웹 뷰어는 이 API로 현장 구독을 걸거나 바꾸지 않는다.
-
-    요청 패키지가 ``subscribePackageId`` 와 다를 때는 캐시를 붙이지 않는다.
-    """
+    """구독 캐시만 읽는다. 요청 패키지가 구독 중이 아니면 값을 붙이지 않는다."""
     field_namespace = _field_namespace(session)
     _source, nodes, _node_ids, aas_id = _package_live_source(
         package, repository, field_namespace=field_namespace
@@ -670,6 +647,58 @@ def opcua_package_live(
         package.id,
         aas_id=aas_id,
         field_namespace=field_namespace,
+    )
+
+
+@router.get("/packages/{package_id}/live")
+def opcua_package_live(
+    package: AasxPackage = Depends(get_package),
+    repository: AasxRepository = Depends(get_repository),
+    session: OpcUaSession = Depends(get_opcua),
+) -> dict[str, Any]:
+    """구독 캐시의 현재 스냅샷. 웹 뷰어는 이 API로 현장 구독을 걸거나 바꾸지 않는다."""
+    return _package_live_payload(package, repository, session)
+
+
+@router.get("/packages/{package_id}/live/stream")
+async def opcua_package_live_stream(
+    request: Request,
+    package: AasxPackage = Depends(get_package),
+    repository: AasxRepository = Depends(get_repository),
+    session: OpcUaSession = Depends(get_opcua),
+) -> StreamingResponse:
+    """구독 알림이 캐시에 들어올 때마다 같은 스냅샷을 보낸다. 처음 연결하면 현재 값을 바로 보낸다."""
+
+    async def events() -> AsyncIterator[str]:
+        queue = session.watch_live()
+        pending = True
+        try:
+            while not await request.is_disconnected():
+                if not pending:
+                    try:
+                        await asyncio.wait_for(queue.get(), timeout=15)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                while not queue.empty():
+                    queue.get_nowait()
+                pending = False
+                try:
+                    payload = _package_live_payload(package, repository, session)
+                    body = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+                except Exception:
+                    logger.exception("LIVE 스트림 스냅샷 실패: package=%s", package.id)
+                    yield ": snapshot-error\n\n"
+                    await asyncio.sleep(1)
+                    continue
+                yield f"data: {body}\n\n"
+        finally:
+            session.unwatch_live(queue)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

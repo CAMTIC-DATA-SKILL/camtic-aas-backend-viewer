@@ -1,9 +1,15 @@
 import asyncio
 from types import SimpleNamespace
 
+from app.opc_ua.client import DataChange
 from app.opc_ua.client.client import OpcUaClient
 from app.opc_ua.session import OpcUaSession
-from app.opcua_api import _tag_live_nodes, engineering_live_response, owns_live_subscription, reconnect_catalog
+from app.opcua_api import (
+    _mapped_engineering_nodes,
+    engineering_live_response,
+    owns_live_subscription,
+    reconnect_catalog,
+)
 
 
 HH7 = "HH7_AAS_Template_v0.2"
@@ -69,35 +75,42 @@ def test_engineering_live_hides_cache_from_other_package():
     assert result["latestCount"] == 1
 
 
-def test_two_packages_read_one_cache_by_tag():
+def test_two_packages_read_one_cache_by_engineering_node():
     session = _session_with_hh7_cache()
     session._subscribe_package_ids = [HH7, "PLC_AAS_Template_v0.4 (1)"]
     assert owns_live_subscription(session, HH7) is True
     assert owns_live_subscription(session, "PLC_AAS_Template_v0.4 (1)") is True
     assert owns_live_subscription(session, DOOSAN) is False
 
-    tag = "ns=2;s=D2010"
-    session._latest[tag] = {"nodeId": tag, "value": True, "status": "Good", "isGood": True}
     package_id = "PLC_AAS_Template_v0.4 (1)"
-    nodes = _tag_live_nodes(
+    signal = "ns=1;s=PLC_AAS_Template_v0.4_1_/PLC_AAS/Robot02_Delta/Handshake/GripWaitRequest"
+    session._latest[signal] = {"nodeId": signal, "value": True, "status": "Good", "isGood": True}
+    nodes = _mapped_engineering_nodes(
         [
             {
+                "nodeId": "ns=1;s=PLC_AAS_Template_v0.4_1_/PLC_AAS/IOInterfaceMapping/Map_D2010/PLCAddress",
                 "aasPath": f"/{package_id}/PLC_AAS/IOInterfaceMapping/Map_D2010/PLCAddress",
                 "templateValue": "D2010",
             },
             {
+                "nodeId": "ns=1;s=PLC_AAS_Template_v0.4_1_/PLC_AAS/IOInterfaceMapping/Map_D2010/AASPath",
                 "aasPath": f"/{package_id}/PLC_AAS/IOInterfaceMapping/Map_D2010/AASPath",
                 "templateValue": "Robot02_Delta/Handshake/GripWaitRequest",
+            },
+            {
+                "nodeId": signal,
+                "browseName": "GripWaitRequest",
+                "aasPath": f"/{package_id}/PLC_AAS/Robot02_Delta/Handshake/GripWaitRequest",
             },
         ],
         package_id,
     )
-    result = engineering_live_response(nodes, session, package_id, field_namespace=2)
+    result = engineering_live_response(nodes, session, package_id, field_namespace=1)
     assert result["subscribeMatch"] is True
     assert result["values"][0]["path"] == "Handshake.GripWaitRequest"
     assert result["values"][0]["submodelIdShort"] == "Robot02_Delta"
     assert result["values"][0]["value"] is True
-    assert result["values"][0]["nodeId"] == tag
+    assert result["values"][0]["nodeId"] == signal
     assert len(session.latest_values()) == 2
 
 
@@ -157,3 +170,23 @@ def test_reconnect_catalog_drops_a_dead_session_and_uses_the_catalog(monkeypatch
     assert status["connected"] is True
     assert events == ["disconnect", True]
     assert session._client is None
+
+
+def _change(node_id: str, value: float) -> DataChange:
+    return DataChange(node_id, value, "Good", True, None, None, 0)
+
+
+def test_live_watch_wakes_once_for_a_publish_burst():
+    async def run() -> None:
+        session = OpcUaSession()
+        queue = session.watch_live()
+        await session._on_data_change(_change("ns=2;s=J1", 1.0))
+        await session._on_data_change(_change("ns=2;s=J2", 2.0))
+        assert queue.empty()
+        await asyncio.sleep(0.05)
+        assert queue.qsize() == 1
+        values = {item["nodeId"]: item["value"] for item in session.latest_values()}
+        assert values == {"ns=2;s=J1": 1.0, "ns=2;s=J2": 2.0}
+        session.unwatch_live(queue)
+
+    asyncio.run(run())

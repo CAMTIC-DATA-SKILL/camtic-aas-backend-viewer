@@ -43,6 +43,7 @@ function toWorldMesh(src, name) {
 
 const state = {
   packageId: null,
+  cameraStream: "",
   info: null,
   mode: "stop",
   available: false,
@@ -701,8 +702,32 @@ function demoLoop() {
   state.demoTimer = setTimeout(demoLoop, 200);
 }
 
+function syncEgoOffline() {
+  const unavailable = !state.cameraStream;
+  const view = $("ego-viewport");
+  const offline = $("ego-offline");
+  if (offline) offline.hidden = !unavailable;
+  view?.classList.toggle("is-offline", unavailable);
+  for (const id of ["ego-modes", "ego-frame", "ego-status", "ego-focus"]) {
+    const node = $(id);
+    if (node) node.inert = unavailable;
+  }
+}
+
+function setCameraStream(url) {
+  state.cameraStream = url || "";
+  const tab = $("sim-tab-ego");
+  if (tab) tab.hidden = false;
+  syncEgoOffline();
+  const onEgo = tab?.getAttribute("aria-selected") === "true";
+  if (!onEgo || !state.cameraStream) stopEgoStream();
+  else startEgoStream();
+}
+
 async function load(packageId) {
+  const samePackage = state.packageId === packageId;
   state.packageId = packageId;
+  if (!samePackage) setCameraStream("");
   state.info = null;
   state.samples = 0;
   state.axisBindings = {};
@@ -712,7 +737,7 @@ async function load(packageId) {
   state.lastChosen = null;
   state.mappings = Object.fromEntries(LABELS.map((k) => [k, "auto"]));
   setModelNote(null);
-  setMode("stop");
+  setMode("live");
   $("sim-host")?.removeAttribute("hidden");
   if (!packageId) {
     clearRobot();
@@ -722,7 +747,9 @@ async function load(packageId) {
     const res = await fetch(`/api/packages/${encodeURIComponent(packageId)}/simulation`);
     const info = await res.json();
     if (!res.ok) throw new Error(info.detail || `${res.status} ${res.statusText}`);
+    if (state.packageId !== packageId) return;
     state.info = info;
+    setCameraStream(info.cameraStream);
     state.axisBindings = info.axisBindings || {};
     state.axisCandidates = info.axisCandidates || [];
     setModelNote(info);
@@ -735,7 +762,7 @@ async function load(packageId) {
       return;
     }
     await loadMesh(info);
-    setMode(info.hasKinematics ? "live" : "stop");
+    setMode("live");
   } catch {
     ensureScene();
     clearRobot();
@@ -744,12 +771,13 @@ async function load(packageId) {
 
 function unload() {
   state.packageId = null;
+  setCameraStream("");
   state.info = null;
   state.entries = [];
   state.lastPayload = null;
   focusClose();
   setModelNote(null);
-  setMode("stop");
+  setMode("live");
   clearRobot();
 }
 
@@ -760,12 +788,16 @@ function focusOpen() {
   const drawer = $("sim-drawer");
   const drawerSlot = $("sim-focus-drawer");
   if (!dialog || !view || !stage) return;
+  if ($("ego-focus-dialog")?.open) egoFocusClose();
   ensureScene();
   if (!dialog.open) dialog.showModal();
+  const note = $("sim-stage-note");
+  if (note) {
+    note.textContent = "확대 창에서 시뮬레이션을 보고 있습니다.";
+    note.hidden = false;
+  }
   stage.appendChild(view);
   if (drawer && drawerSlot) drawerSlot.appendChild(drawer);
-  const note = $("sim-stage-note");
-  if (note) note.hidden = false;
   $("sim-host")?.classList.add("is-focused");
   document.documentElement.classList.add("sim-modal-open");
   setFocusButton(true);
@@ -784,10 +816,154 @@ function focusClose() {
   const note = $("sim-stage-note");
   if (note) note.hidden = true;
   $("sim-host")?.classList.remove("is-focused");
-  document.documentElement.classList.remove("sim-modal-open");
+  if (!$("ego-focus-dialog")?.open) document.documentElement.classList.remove("sim-modal-open");
   setFocusButton(false);
   if (dialog?.open) dialog.close();
   requestAnimationFrame(resizeView);
+}
+
+function startEgoStream() {
+  const img = $("ego-stream");
+  const status = $("ego-status");
+  if (!img || !state.cameraStream) return;
+  if (img.dataset.live === "1") {
+    if (status && img.complete && img.naturalWidth) status.hidden = true;
+    return;
+  }
+  if (status) {
+    status.hidden = false;
+    status.textContent = "카메라 스트림을 연결하는 중";
+  }
+  img.dataset.live = "1";
+  img.src = `${state.cameraStream}?t=${Date.now()}`;
+}
+
+function stopEgoStream() {
+  const img = $("ego-stream");
+  if (!img || img.dataset.live !== "1") return;
+  img.dataset.live = "0";
+  img.removeAttribute("src");
+  resetEgoFrame();
+}
+
+const EGO_MODE_LABEL = { both: "RGB+Depth", rgb: "RGB", depth: "Depth" };
+
+function resetEgoFrame() {
+  const frame = $("ego-frame");
+  const img = $("ego-stream");
+  for (const node of [frame, img]) {
+    if (!node) continue;
+    node.style.width = "";
+    node.style.height = "";
+    node.style.left = "";
+    node.style.top = "";
+  }
+}
+
+function layoutEgoFrame() {
+  const view = $("ego-viewport");
+  const frame = $("ego-frame");
+  const img = $("ego-stream");
+  if (!view || !frame || !img) return;
+  const width = view.clientWidth;
+  const height = view.clientHeight;
+  const naturalWidth = img.naturalWidth;
+  const naturalHeight = img.naturalHeight;
+  if (width < 2 || height < 2 || !naturalWidth || !naturalHeight) return;
+  const mode = EGO_MODE_LABEL[view.dataset.mode] ? view.dataset.mode : "both";
+  const sourceWidth = mode === "both" ? naturalWidth : naturalWidth / 2;
+  const scale = Math.min(width / sourceWidth, height / naturalHeight);
+  const drawnWidth = naturalWidth * scale;
+  const drawnHeight = naturalHeight * scale;
+  const panel = sourceWidth * scale;
+  const visible = mode === "both" ? drawnWidth : panel;
+  frame.style.width = `${visible}px`;
+  frame.style.height = `${drawnHeight}px`;
+  frame.style.left = `${(width - visible) / 2}px`;
+  frame.style.top = `${(height - drawnHeight) / 2}px`;
+  img.style.width = `${drawnWidth}px`;
+  img.style.height = `${drawnHeight}px`;
+  img.style.top = "0";
+  img.style.left = mode === "depth" ? `${-panel}px` : "0";
+}
+
+function setEgoMode(mode) {
+  if (!EGO_MODE_LABEL[mode]) return;
+  const view = $("ego-viewport");
+  if (view) view.dataset.mode = mode;
+  document.querySelectorAll("[data-ego-mode]").forEach((button) => {
+    button.setAttribute("aria-selected", button.dataset.egoMode === mode ? "true" : "false");
+  });
+  const img = $("ego-stream");
+  if (img) img.alt = `장비 카메라 ${EGO_MODE_LABEL[mode]} 스트림`;
+  layoutEgoFrame();
+}
+
+function setPane(name) {
+  const sim = name !== "ego";
+  if (!sim && $("sim-focus-dialog")?.open) focusClose();
+  if (sim && $("ego-focus-dialog")?.open) egoFocusClose();
+  const view = $("sim-viewport");
+  const ego = $("ego-viewport");
+  if (view) view.hidden = !sim;
+  if (ego) ego.hidden = sim;
+  $("sim-host")?.classList.toggle("is-ego", !sim);
+  $("sim-tab-sim")?.setAttribute("aria-selected", sim ? "true" : "false");
+  $("sim-tab-ego")?.setAttribute("aria-selected", sim ? "false" : "true");
+  syncEgoOffline();
+  if (sim || !state.cameraStream) stopEgoStream();
+  else {
+    startEgoStream();
+    requestAnimationFrame(layoutEgoFrame);
+  }
+  if (sim) requestAnimationFrame(resizeView);
+}
+
+function setEgoFocusButton(open) {
+  const button = $("ego-focus");
+  if (!button) return;
+  button.classList.toggle("is-open", open);
+  button.setAttribute("aria-pressed", open ? "true" : "false");
+  button.setAttribute("aria-label", open ? "카메라 축소" : "카메라 확대");
+  button.title = open ? "축소" : "확대";
+}
+
+function egoFocusOpen() {
+  const dialog = $("ego-focus-dialog");
+  const view = $("ego-viewport");
+  const stage = $("ego-focus-stage");
+  if (!dialog || !view || !stage) return;
+  if ($("sim-focus-dialog")?.open) focusClose();
+  if (!dialog.open) dialog.showModal();
+  stage.appendChild(view);
+  view.hidden = false;
+  const note = $("sim-stage-note");
+  if (note) {
+    note.textContent = "확대 창에서 카메라 영상을 보고 있습니다.";
+    note.hidden = false;
+  }
+  document.documentElement.classList.add("sim-modal-open");
+  setEgoFocusButton(true);
+  startEgoStream();
+  requestAnimationFrame(layoutEgoFrame);
+}
+
+function egoFocusClose() {
+  const dialog = $("ego-focus-dialog");
+  const view = $("ego-viewport");
+  const stage = $("sim-stage");
+  const note = $("sim-stage-note");
+  if (view && stage && view.parentElement !== stage) {
+    if (note) stage.insertBefore(view, note);
+    else stage.appendChild(view);
+  }
+  const onEgo = $("sim-tab-ego")?.getAttribute("aria-selected") === "true";
+  if (view) view.hidden = !onEgo;
+  if (note && !$("sim-focus-dialog")?.open) note.hidden = true;
+  if (!$("sim-focus-dialog")?.open) document.documentElement.classList.remove("sim-modal-open");
+  setEgoFocusButton(false);
+  if (dialog?.open) dialog.close();
+  if (!onEgo) stopEgoStream();
 }
 
 function setFocusButton(open) {
@@ -805,7 +981,6 @@ function onManualJoint(index, value) {
     if (slider) slider.value = String(((state.displayAngles[index] ?? 0) * 180) / Math.PI);
     return;
   }
-  setMode("stop");
   const pose = state.displayAngles.slice();
   while (pose.length < 6) pose.push(0);
   pose[index] = rad(Number(value));
@@ -867,19 +1042,56 @@ function redrive() {
 
 function bindUi() {
   buildSliders();
-  const goLive = () => setMode("live");
-  const goDemo = () => {
-    if (state.available) setMode("demo");
-  };
-  const goStop = () => setMode("stop");
-  $("sim-live")?.addEventListener("click", goLive);
-  $("sim-focus-live")?.addEventListener("click", goLive);
-  $("sim-demo")?.addEventListener("click", goDemo);
-  $("sim-focus-demo")?.addEventListener("click", goDemo);
-  $("sim-stop")?.addEventListener("click", goStop);
-  $("sim-focus-stop")?.addEventListener("click", goStop);
-  $("sim-fit")?.addEventListener("click", () => fitCamera());
-  $("sim-focus-fit")?.addEventListener("click", () => fitCamera());
+  setMode("live");
+  $("sim-tab-sim")?.addEventListener("click", () => setPane("sim"));
+  $("sim-tab-ego")?.addEventListener("click", () => setPane("ego"));
+  $("ego-stream")?.addEventListener("load", () => {
+    const status = $("ego-status");
+    if (status) status.hidden = true;
+    layoutEgoFrame();
+  });
+  $("ego-modes")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-ego-mode]");
+    if (!button) return;
+    setEgoMode(button.dataset.egoMode);
+  });
+  if ($("ego-viewport") && "ResizeObserver" in window) {
+    new ResizeObserver(() => layoutEgoFrame()).observe($("ego-viewport"));
+  }
+  $("ego-stream")?.addEventListener("error", () => {
+    const img = $("ego-stream");
+    if (!img || img.dataset.live !== "1") return;
+    img.dataset.live = "0";
+    img.removeAttribute("src");
+    const status = $("ego-status");
+    if (status) {
+      status.hidden = false;
+      status.textContent = "카메라 스트림을 받지 못했습니다.";
+    }
+    resetEgoFrame();
+  });
+  $("ego-focus")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if ($("ego-focus-dialog")?.open) egoFocusClose();
+    else egoFocusOpen();
+  });
+  $("ego-focus-close")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    egoFocusClose();
+  });
+  $("ego-focus-dialog")?.addEventListener("close", () => {
+    if ($("ego-viewport")?.parentElement?.id === "ego-focus-stage") egoFocusClose();
+  });
+  const egoDialog = $("ego-focus-dialog");
+  let egoBackdropDown = false;
+  egoDialog?.addEventListener("pointerdown", (event) => {
+    egoBackdropDown = event.target === egoDialog;
+  });
+  egoDialog?.addEventListener("click", (event) => {
+    if (egoBackdropDown && event.target === egoDialog) egoFocusClose();
+    egoBackdropDown = false;
+  });
   $("sim-focus")?.addEventListener("click", (event) => {
     event.stopPropagation();
     if ($("sim-focus-dialog")?.open) focusClose();
@@ -904,7 +1116,6 @@ function bindUi() {
   });
   $("sim-home")?.addEventListener("click", () => {
     if (!state.chain.length) return;
-    setMode("stop");
     setPose(Array(6).fill(0), { snap: true });
     setFocusStatus("J1~J6 = 0°");
     refreshKpis();

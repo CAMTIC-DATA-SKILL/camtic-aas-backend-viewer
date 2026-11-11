@@ -14,6 +14,9 @@ from .values import serialize_data_value, serialize_value
 
 logger = LogSetup.get_logger(__name__)
 
+# 한 발행에 노드 알림이 연속으로 온다. 마지막 알림 직후 한 번만 깨운다.
+LIVE_COALESCE_S = 0.02
+
 
 class OpcUaSession:
     """프로세스 전역 OPC-UA 접속. HTTP 요청 사이에 연결을 유지한다."""
@@ -32,9 +35,23 @@ class OpcUaSession:
         self._reconnect_lock = asyncio.Lock()
         # 수신 알림을 _latest 외에 받을 곳 (예: TimescaleDB 기록). 콜백 안에서 오래 걸리면 안 된다.
         self._listeners: list[Callable[[DataChange, datetime], None]] = []
+        self._live_queues: list[asyncio.Queue[None]] = []
+        self._live_handle: asyncio.TimerHandle | None = None
 
     def add_listener(self, listener: Callable[[DataChange, datetime], None]) -> None:
         self._listeners.append(listener)
+
+    def watch_live(self) -> asyncio.Queue[None]:
+        """구독 값이 캐시에 반영되면 한 번 깨우는 큐. 화면은 이 신호로 캐시를 읽는다."""
+        queue: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
+        self._live_queues.append(queue)
+        return queue
+
+    def unwatch_live(self, queue: asyncio.Queue[None]) -> None:
+        try:
+            self._live_queues.remove(queue)
+        except ValueError:
+            return
 
     @property
     def is_connected(self) -> bool:
@@ -308,6 +325,28 @@ class OpcUaSession:
                 listener(change, received_at)
             except Exception:
                 logger.exception("수신 리스너 오류 (node=%s)", change.node_id)
+        self._schedule_live_notify()
+
+    def _schedule_live_notify(self) -> None:
+        if not self._live_queues:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if self._live_handle is not None:
+            self._live_handle.cancel()
+        self._live_handle = loop.call_later(LIVE_COALESCE_S, self._flush_live)
+
+    def _flush_live(self) -> None:
+        self._live_handle = None
+        for queue in self._live_queues:
+            if queue.full():
+                continue
+            try:
+                queue.put_nowait(None)
+            except asyncio.QueueFull:
+                continue
 
     async def _attach_client(self, client: OpcUaClient) -> None:
         await client.connect()

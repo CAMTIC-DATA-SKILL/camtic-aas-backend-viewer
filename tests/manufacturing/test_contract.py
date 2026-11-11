@@ -188,7 +188,8 @@ def test_existing_and_new_routes_registered_and_disabled_state_is_503():
 
     paths = set(app.openapi()["paths"])
     assert {"/api/health", "/api/packages", "/api/packages/{package_id}/tree", "/api/opcua/status",
-            "/api/opcua/connect", "/api/opcua/subscribe", "/api/opcua/packages/{package_id}/live"} <= paths
+            "/api/opcua/connect", "/api/opcua/subscribe", "/api/opcua/packages/{package_id}/live",
+            "/api/camera/d455/stream.mjpg"} <= paths
     assert {p.removeprefix("/api/v1/timeseries") for p in paths if p.startswith("/api/v1/")} == {
         "/alarms", "/db-status", "/equipment", "/history", "/history.csv", "/ingest", "/latest", "/mapping",
         "/mappings", "/node-status", "/nodes", "/recent", "/stream", "/summary"}
