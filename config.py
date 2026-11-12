@@ -5,7 +5,8 @@
 """
 
 import os
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -134,10 +135,14 @@ class ManufacturingConfig:
     # 기존 OPC-UA 구독 수신값을 REAL 설비로 기록한다 (구독은 그대로, 리스너만 붙음).
     record_opcua: bool = False
     # 시작 시 OPC-UA 자동 접속. 원본 동작(true)이 기본이다. 승인 전 운영 서버에서 실제 접속을 막을 때만 .env 에서 false.
+    # MQTT_ENABLED=true 이면 이 값과 관계없이 시작 시 상시 구독은 하지 않는다.
     auto_connect_opcua: bool = True
     equipment_id: str = "ROBOT_FIELD_01"
     # 수신 중단·복구, Bad/Uncertain 품질, 임계값 초과를 alarm_event 에 기록한다.
     alarms_enabled: bool = False
+    # packages/ 의 AASX 템플릿 engineering.csv 를 주기적으로 읽어 설비·노드·AAS 매핑을 올린다.
+    sync_packages: bool = True
+    sync_interval_s: float = 60.0
 
 def load_manufacturing_config() -> ManufacturingConfig:
     enabled = _bool("MFG_ENABLED", False)
@@ -157,6 +162,8 @@ def load_manufacturing_config() -> ManufacturingConfig:
         auto_connect_opcua=_bool("OPCUA_AUTO_CONNECT", True),
         equipment_id=_str("MFG_EQUIPMENT_ID", "ROBOT_FIELD_01"),
         alarms_enabled=_bool("MFG_ALARMS_ENABLED", False),
+        sync_packages=_bool("MFG_SYNC_PACKAGES", True),
+        sync_interval_s=max(5.0, _float("MFG_SYNC_INTERVAL_S", 60.0)),
     )
     if enabled and not cfg.db_password:
         raise RuntimeError("MFG_ENABLED=true 이면 MFG_DB_PASSWORD 가 필요합니다. .env 를 확인하세요.")
@@ -311,6 +318,76 @@ def load_storage() -> StorageLayout:
 
 
 @dataclass(frozen=True)
+class MqttConfig:
+    """실시간 값 브로커.
+
+    ``enabled`` 이면 AAS 서버가 구독하고, 시작 시 OPC-UA 상시 구독은 하지 않는다.
+    발행 프로세스(``python -m publisher``)는 같은 주소로 값을 올린다.
+    """
+
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 1883
+    username: Optional[str] = None
+    password: Optional[str] = field(default=None, repr=False)
+    topic_prefix: str = "aas"
+    client_id: str = "camtic-aas-subscriber"
+    publisher_client_id: str = "camtic-aas-publisher"
+    keepalive: int = 60
+
+
+def write_env_value(path: Path, key: str, value: str) -> None:
+    """``.env`` 의 한 줄만 바꾼다. 다른 줄과 주석은 그대로 둔다."""
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    line = f"{key}={value}"
+    pattern = re.compile(rf"^(?:export\s+)?{re.escape(key)}=.*$", re.MULTILINE)
+    if pattern.search(text):
+        text = pattern.sub(line, text, count=1)
+    else:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        text += line + "\n"
+    path.write_text(text, encoding="utf-8")
+
+
+def set_mqtt_enabled(enabled: bool, env_path: Path | None = None) -> MqttConfig:
+    """MQTT 실시간 경로를 ``.env`` 와 이 프로세스 설정에 같이 반영한다."""
+    flag = "true" if enabled else "false"
+    write_env_value(env_path or (BASE_DIR / ".env"), "MQTT_ENABLED", flag)
+    os.environ["MQTT_ENABLED"] = flag
+    updated = replace(settings.mqtt, enabled=enabled)
+    object.__setattr__(settings, "mqtt", updated)
+    return updated
+
+
+def load_mqtt_config() -> MqttConfig:
+    prefix = _str("MQTT_TOPIC_PREFIX", "aas").strip().strip("/")
+    if not prefix or any(part in {"+", "#"} or "+" in part or "#" in part for part in prefix.split("/")):
+        raise RuntimeError(f"MQTT_TOPIC_PREFIX 는 빈 값이나 와일드카드(+, #)일 수 없습니다: {prefix!r}")
+    port = _int("MQTT_PORT", 1883)
+    if not 1 <= port <= 65535:
+        raise RuntimeError(f"MQTT_PORT 는 1~65535 여야 합니다: {port}")
+    keepalive = _int("MQTT_KEEPALIVE", 60)
+    if keepalive < 1:
+        raise RuntimeError(f"MQTT_KEEPALIVE 는 1 이상이어야 합니다: {keepalive}")
+    client_id = _str("MQTT_CLIENT_ID", "camtic-aas-subscriber")
+    publisher_client_id = _str("MQTT_PUBLISHER_CLIENT_ID", "camtic-aas-publisher")
+    if not client_id or not publisher_client_id:
+        raise RuntimeError("MQTT_CLIENT_ID 와 MQTT_PUBLISHER_CLIENT_ID 는 비울 수 없습니다.")
+    return MqttConfig(
+        enabled=_bool("MQTT_ENABLED", False),
+        host=_str("MQTT_HOST", "127.0.0.1"),
+        port=port,
+        username=_optional_str("MQTT_USERNAME"),
+        password=_optional_str("MQTT_PASSWORD"),
+        topic_prefix=prefix,
+        client_id=client_id,
+        publisher_client_id=publisher_client_id,
+        keepalive=keepalive,
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     storage: StorageLayout
 
@@ -327,6 +404,7 @@ class Settings:
 
     opcua: OpcUaConfig
     manufacturing: ManufacturingConfig
+    mqtt: MqttConfig
 
 
 def load_settings() -> Settings:
@@ -373,6 +451,7 @@ def load_settings() -> Settings:
         log_backup_count=_int("LOG_BACKUP_COUNT", 5),
         opcua=opcua,
         manufacturing=load_manufacturing_config(),
+        mqtt=load_mqtt_config(),
     )
 
 

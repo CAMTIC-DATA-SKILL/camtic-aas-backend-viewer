@@ -554,6 +554,17 @@ li:not(.collapsed) > .row .caret::before { content: "▾"; }
   min-height: 420px;
 }
 .sim-host[hidden] { display: none; }
+.sim-host.is-sim-unavailable,
+.sim-host.is-collapsed { min-height: 0; }
+.sim-host.is-collapsed #sim-mode,
+.sim-host.is-collapsed #sim-stage,
+.sim-host.is-collapsed #sim-drawer-home { display: none; }
+.sim-host.is-sim-unavailable #sim-mode,
+.sim-host.is-sim-unavailable #sim-drawer-home { display: none; }
+.sim-viewport.is-offline .sim-title,
+.sim-viewport.is-offline .sim-hud,
+.sim-viewport.is-offline .sim-focus-btn,
+.sim-viewport.is-offline .sim-canvas { visibility: hidden; }
 .sim-toolbar {
   display: flex;
   align-items: center;
@@ -1116,6 +1127,7 @@ html.sim-modal-open .tsdb-view {
   flex: 1;
   min-height: 0;
 }
+.opcua-panel[hidden] { display: none; }
 .opcua-head {
   display: flex;
   justify-content: space-between;
@@ -1239,6 +1251,44 @@ html.sim-modal-open .tsdb-view {
 }
 .opcua-monitor tr.changed .value-cell { background: #e8f7ee; }
 .status-badge.warn { background: #fff4d6; color: #8a5a00; }
+
+.mqtt-route {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #e7ecf2;
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.mqtt-route h3 { margin: 0 0 4px; font-size: 14px; }
+.mqtt-route p { margin: 0; }
+.mqtt-route-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 180px;
+  font-size: 12px;
+  color: #5b6775;
+}
+.mqtt-route-select select,
+.mqtt-wildcard-custom input {
+  padding: 6px 8px;
+  border: 1px solid #c4ccd6;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 14px;
+  color: #1c2430;
+  background: #fff;
+}
+.mqtt-log-head { align-items: end; }
+.mqtt-package-select { min-width: 280px; }
+.mqtt-subpath-select { min-width: 180px; }
+.mqtt-wildcard-custom { flex: 1; min-width: min(360px, 100%); }
+.mqtt-wildcard-help { margin: 0; }
+.mqtt-log { max-height: min(640px, 68vh); }
+.mqtt-log tr.mqtt-rejected .value-cell { color: #8a5a00; }
 
 .layout.live-mode {
   grid-template-rows: minmax(220px, 1fr) auto;

@@ -17,6 +17,17 @@ const state = {
     expandedIds: new Set(),
     monitor: { mode: null, nodes: [], values: {}, title: "", truncated: false },
   },
+  mqtt: {
+    timer: null,
+    renderedSeq: null,
+    package: "",
+    subpath: "",
+    tail: "",
+    wildcard: "",
+    branches: [],
+    branchSignature: "",
+    childSignature: "",
+  },
 };
 
 function parseView() {
@@ -26,6 +37,11 @@ function parseView() {
   return "home";
 }
 
+function utilityPage() {
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  return hash === "utility/mqtt" ? "mqtt" : "opcua";
+}
+
 function showView(name) {
   state.view = name;
   $("view-home").hidden = name !== "home";
@@ -33,15 +49,21 @@ function showView(name) {
   $("view-api").hidden = name !== "api";
   $("home-actions").hidden = name !== "home";
 
+  const page = name === "utility" ? utilityPage() : "";
+  $("utility-opcua").hidden = page !== "opcua";
+  $("utility-mqtt").hidden = page !== "mqtt";
   $("nav-home").classList.toggle("active", name === "home");
   $("nav-utility").classList.toggle("active", name === "utility");
-  $("nav-utility-opcua").classList.toggle("active", name === "utility");
+  $("nav-utility-opcua").classList.toggle("active", page === "opcua");
+  $("nav-utility-mqtt").classList.toggle("active", page === "mqtt");
   $("nav-api").classList.toggle("active", name === "api");
 
-  if (name === "utility" && !state.opcua.statusLoaded) {
+  if (page === "opcua" && !state.opcua.statusLoaded) {
     state.opcua.statusLoaded = true;
     loadOpcuaStatus();
   }
+  if (page === "mqtt") startMqttPoll();
+  else stopMqttPoll();
   if (name === "api" && !state.apiDocsLoaded) {
     state.apiDocsLoaded = true;
     $("api-docs-frame").src = "/docs";
@@ -424,6 +446,12 @@ function renderOpcuaStatus(status) {
   badge.className = `status-badge ${status.connected ? "ok" : "warn"}`;
   const subscribed = status.subscribedNodeIds?.length || 0;
   const latest = status.latestCount || 0;
+  const mqttNote =
+    status.liveSource === "mqtt"
+      ? status.mqttConnected
+        ? "실시간 MQTT 수신 중"
+        : "실시간 MQTT 연결 대기"
+      : "";
   const parts = status.connected
     ? [
         status.endpoint,
@@ -431,8 +459,9 @@ function renderOpcuaStatus(status) {
         subscribed ? `구독 ${subscribed}개` : "구독 없음",
         subscribed ? `최신 ${latest}` : "",
         status.catalogServerId ? `서버 ${status.catalogServerId}` : "",
+        mqttNote,
       ]
-    : [`기본 엔드포인트: ${status.endpoint || "-"}`];
+    : [`기본 엔드포인트: ${status.endpoint || "-"}`, mqttNote];
   $("opcua-status-text").textContent = parts.filter(Boolean).join(" · ");
   if (!$("opcua-endpoint").value) {
     $("opcua-endpoint").value = status.endpoint || "";
@@ -967,6 +996,284 @@ async function readSelectedPackageNodes() {
   }
 }
 
+function formatMqttValue(value) {
+  if (value == null) return "-";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function startMqttPoll() {
+  if (state.mqtt.timer) return;
+  loadMqttLogs();
+  state.mqtt.timer = setInterval(loadMqttLogs, 1000);
+}
+
+function stopMqttPoll() {
+  if (!state.mqtt.timer) return;
+  clearInterval(state.mqtt.timer);
+  state.mqtt.timer = null;
+}
+
+function mqttLogsUrl(path) {
+  const params = new URLSearchParams();
+  params.set("limit", "200");
+  if (state.mqtt.wildcard) params.set("wildcard", state.mqtt.wildcard);
+  return `${path}?${params.toString()}`;
+}
+
+function composeMqttWildcard() {
+  const parts = [state.mqtt.package, state.mqtt.subpath].filter(Boolean);
+  const tail = state.mqtt.tail.trim().replace(/^\/+|\/+$/g, "");
+  if (tail) parts.push(tail);
+  if (!parts.length) return "";
+  const pattern = parts.join("/");
+  return pattern.includes("#") ? pattern : `${pattern}/#`;
+}
+
+function applyMqttFilter() {
+  state.mqtt.wildcard = composeMqttWildcard();
+  state.mqtt.renderedSeq = null;
+  loadMqttLogs();
+}
+
+function fillMqttSelect(select, options, value) {
+  select.replaceChildren();
+  for (const item of options) {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    select.append(option);
+  }
+  select.value = options.some((item) => item.value === value) ? value : "";
+}
+
+function syncMqttBranches(body) {
+  const packages = $("mqtt-package");
+  const subpaths = $("mqtt-subpath");
+  if (!packages || !subpaths) return;
+  if (document.activeElement === packages || document.activeElement === subpaths) return;
+  const branches = body.branches || [];
+  state.mqtt.branches = branches;
+  const signature = branches
+    .map((branch) => `${branch.package}\t${branch.topics}\t${(branch.children || []).map((child) => `${child.name}:${child.topics}`).join(",")}`)
+    .join("\n");
+  if (signature !== state.mqtt.branchSignature) {
+    state.mqtt.branchSignature = signature;
+    fillMqttSelect(
+      packages,
+      [{ value: "", label: "전체" }].concat(
+        branches.map((branch) => ({
+          value: branch.package,
+          label: branch.topics ? `${branch.package} (${branch.topics})` : branch.package,
+        })),
+      ),
+      state.mqtt.package,
+    );
+    state.mqtt.package = packages.value;
+  }
+  const branch = branches.find((item) => item.package === state.mqtt.package);
+  const children = branch?.children || [];
+  const childSignature = `${state.mqtt.package}\n${children.map((child) => `${child.name}:${child.topics}`).join("\n")}`;
+  if (childSignature !== state.mqtt.childSignature) {
+    state.mqtt.childSignature = childSignature;
+    fillMqttSelect(
+      subpaths,
+      [{ value: "", label: "전체" }].concat(
+        children.map((child) => ({
+          value: child.name,
+          label: child.topics ? `${child.name} (${child.topics})` : child.name,
+        })),
+      ),
+      state.mqtt.subpath,
+    );
+    state.mqtt.subpath = subpaths.value;
+  }
+  subpaths.disabled = !body.enabled || state.mqtt.switching || !state.mqtt.package;
+}
+
+async function loadMqttLogs() {
+  if (state.mqtt.switching) return;
+  try {
+    renderMqttLogs(await fetchJson(mqttLogsUrl("/api/mqtt/logs")));
+  } catch (e) {
+    if (!mqttRouteUnavailable(e)) {
+      $("mqtt-status-text").textContent = e.message;
+      return;
+    }
+    $("mqtt-badge").className = "status-badge warn";
+    $("mqtt-badge").textContent = "OPC-UA 직접";
+    $("mqtt-route-select").value = "opcua";
+    $("mqtt-status-text").textContent = "경로 전환 API가 이 프로세스에 없습니다. AAS 서버를 재시작하면 이 페이지에서 OPC-UA와 MQTT를 바꿀 수 있습니다.";
+  }
+}
+
+function mqttRouteUnavailable(error) {
+  return error.message === "Not Found" || error.message === "Method Not Allowed";
+}
+
+function replaceMqttLog(...children) {
+  const log = $("mqtt-log");
+  const scrollTop = log.scrollTop;
+  log.replaceChildren(...children);
+  log.scrollTop = scrollTop;
+}
+
+function renderMqttLogs(body) {
+  const enabled = Boolean(body.enabled);
+  const newest = body.entrySeq ?? body.entries?.[0]?.seq ?? 0;
+  const stamp = `${enabled}:${body.connected}:${body.wildcard || ""}:${newest}:${body.matched ?? ""}:${body.lastError || ""}`;
+  $("mqtt-clear-btn").disabled = !enabled || state.mqtt.switching;
+  $("mqtt-route-select").disabled = state.mqtt.switching;
+  $("mqtt-package").disabled = !enabled || state.mqtt.switching;
+  $("mqtt-subpath").disabled = !enabled || state.mqtt.switching || !state.mqtt.package;
+  $("mqtt-wildcard-input").disabled = !enabled || state.mqtt.switching;
+  $("mqtt-route-select").value = enabled ? "mqtt" : "opcua";
+  $("mqtt-route-text").textContent = enabled
+    ? "MQTT 브로커를 구독 중입니다. 이 서버는 OPC-UA 상시 구독을 하지 않습니다. .env 의 MQTT_ENABLED=true 입니다."
+    : "OPC-UA를 직접 구독 중입니다. MQTT 브로커로 바꾸면 상시 OPC-UA 구독이 멈추고 .env 의 MQTT_ENABLED=true 로 기록됩니다.";
+  const scope = body.wildcard ? `패턴 ${body.wildcard}` : `topic ${body.topic}`;
+  const latest = enabled
+    ? `  토픽 ${body.matched ?? 0}개의 마지막 값${body.truncated ? `  표시 ${body.entries?.length ?? 0}` : ""}`
+    : "";
+  const where = `${scope}${latest}`;
+  $("mqtt-meta").textContent = body.host
+    ? `${body.host}:${body.port}  ${where}  수신 ${body.received ?? 0}  무시 ${body.rejected ?? 0}`
+    : "";
+  syncMqttBranches(body);
+  if (!enabled) {
+    $("mqtt-badge").className = "status-badge warn";
+    $("mqtt-badge").textContent = "OPC-UA 직접";
+    $("mqtt-status-text").textContent = body.message || "지금은 OPC-UA를 직접 구독합니다.";
+  } else if (body.connected) {
+    $("mqtt-badge").className = "status-badge ok";
+    $("mqtt-badge").textContent = "MQTT 구독 중";
+    $("mqtt-status-text").textContent = `${body.topic} 구독 중입니다.`;
+  } else {
+    $("mqtt-badge").className = "status-badge error";
+    $("mqtt-badge").textContent = "MQTT 연결 끊김";
+    $("mqtt-status-text").textContent = body.lastError
+      ? `브로커 구독이 연결되어 있지 않습니다. ${body.lastError}`
+      : "브로커 구독이 연결되어 있지 않습니다.";
+  }
+  if (stamp === state.mqtt.renderedSeq) return;
+  state.mqtt.renderedSeq = stamp;
+  const entries = body.entries || [];
+  if (!enabled) {
+    replaceMqttLog(
+      el("p", { className: "muted" }, "OPC-UA 직접 구독 중에는 브로커 수신 로그가 없습니다. MQTT 브로커로 바꾸면 여기에 쌓입니다."),
+    );
+    return;
+  }
+  if (!entries.length) {
+    replaceMqttLog(
+      el(
+        "p",
+        { className: "muted" },
+        body.wildcard
+          ? "이 와일드카드에 해당하는 토픽이 아직 없습니다."
+          : "아직 받은 토픽이 없습니다.",
+      ),
+    );
+    return;
+  }
+  replaceMqttLog(
+    el(
+      "table",
+      {},
+      el(
+        "tr",
+        {},
+        el("th", {}, "수신 시각"),
+        el("th", {}, "토픽"),
+        el("th", {}, "경로"),
+        el("th", {}, "값"),
+        el("th", {}, "품질"),
+        el("th", {}, "결과"),
+      ),
+      entries.map((entry) =>
+        el(
+          "tr",
+          { className: entry.accepted ? "" : "mqtt-rejected" },
+          el("td", { className: "muted" }, formatTime(entry.at)),
+          el("td", {}, entry.topic || "-"),
+          el("td", {}, entry.path || "-"),
+          el("td", { className: "value-cell" }, entry.accepted ? formatMqttValue(entry.value) : entry.payload || "-"),
+          el("td", {}, entry.status || "-"),
+          el("td", {}, entry.accepted ? "수신" : "무시"),
+        ),
+      ),
+    ),
+  );
+}
+
+async function switchLiveRoute(enabled) {
+  if (state.mqtt.switching) return;
+  state.mqtt.switching = true;
+  state.mqtt.renderedSeq = null;
+  $("mqtt-route-select").disabled = true;
+  $("mqtt-status-text").textContent = enabled ? "MQTT 브로커로 바꾸는 중..." : "OPC-UA 직접 구독으로 바꾸는 중...";
+  try {
+    renderMqttLogs(await fetchJson(mqttLogsUrl("/api/mqtt/route"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }));
+  } catch (e) {
+    $("mqtt-route-select").value = enabled ? "opcua" : "mqtt";
+    $("mqtt-status-text").textContent = mqttRouteUnavailable(e)
+      ? "경로 전환 API가 이 프로세스에 없습니다. AAS 서버를 재시작하면 이 페이지에서 바꿀 수 있습니다."
+      : e.message;
+  } finally {
+    state.mqtt.switching = false;
+    $("mqtt-route-select").disabled = false;
+  }
+}
+
+async function clearMqttLogs() {
+  try {
+    state.mqtt.renderedSeq = null;
+    renderMqttLogs(await fetchJson(mqttLogsUrl("/api/mqtt/logs/clear"), { method: "POST" }));
+  } catch (e) {
+    $("mqtt-status-text").textContent = e.message;
+  }
+}
+
+$("mqtt-clear-btn").addEventListener("click", clearMqttLogs);
+$("mqtt-package").addEventListener("change", () => {
+  state.mqtt.package = $("mqtt-package").value;
+  state.mqtt.subpath = "";
+  state.mqtt.childSignature = "";
+  const branch = state.mqtt.branches.find((item) => item.package === state.mqtt.package);
+  fillMqttSelect(
+    $("mqtt-subpath"),
+    [{ value: "", label: "전체" }].concat(
+      (branch?.children || []).map((child) => ({
+        value: child.name,
+        label: child.topics ? `${child.name} (${child.topics})` : child.name,
+      })),
+    ),
+    "",
+  );
+  $("mqtt-subpath").disabled = !state.mqtt.package;
+  applyMqttFilter();
+});
+$("mqtt-subpath").addEventListener("change", () => {
+  state.mqtt.subpath = $("mqtt-subpath").value;
+  applyMqttFilter();
+});
+$("mqtt-wildcard-input").addEventListener("change", () => {
+  state.mqtt.tail = $("mqtt-wildcard-input").value;
+  applyMqttFilter();
+});
+$("mqtt-wildcard-input").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  state.mqtt.tail = $("mqtt-wildcard-input").value;
+  applyMqttFilter();
+});
+$("mqtt-route-select").addEventListener("change", () => {
+  switchLiveRoute($("mqtt-route-select").value === "mqtt");
+});
 $("opcua-connect-btn").addEventListener("click", connectOpcua);
 $("opcua-disconnect-btn").addEventListener("click", disconnectOpcua);
 $("opcua-read-once-btn").addEventListener("click", () => readOpcuaTargets());

@@ -46,6 +46,7 @@ const state = {
   cameraStream: "",
   info: null,
   mode: "stop",
+  canSimulate: false,
   available: false,
   parts: {},
   chain: [],
@@ -702,6 +703,27 @@ function demoLoop() {
   state.demoTimer = setTimeout(demoLoop, 200);
 }
 
+function currentPane() {
+  const host = $("sim-host");
+  if (!host || host.classList.contains("is-collapsed")) return null;
+  return host.classList.contains("is-ego") ? "ego" : "sim";
+}
+
+function syncSimOffline() {
+  const unavailable = !state.canSimulate;
+  const view = $("sim-viewport");
+  const offline = $("sim-offline");
+  if (offline) offline.hidden = !unavailable;
+  view?.classList.toggle("is-offline", unavailable);
+}
+
+function setSimUsable(usable) {
+  state.canSimulate = Boolean(usable);
+  $("sim-host")?.classList.toggle("is-sim-unavailable", !state.canSimulate);
+  syncSimOffline();
+  if (!state.canSimulate && $("sim-focus-dialog")?.open) focusClose();
+}
+
 function syncEgoOffline() {
   const unavailable = !state.cameraStream;
   const view = $("ego-viewport");
@@ -739,6 +761,7 @@ async function load(packageId) {
   setModelNote(null);
   setMode("live");
   $("sim-host")?.removeAttribute("hidden");
+  if (!samePackage) setSimUsable(false);
   if (!packageId) {
     clearRobot();
     return;
@@ -757,14 +780,16 @@ async function load(packageId) {
     if (drive) drive.value = info.driveDefault || "tcp";
     fillMapOptions();
     if (!info.hasMesh) {
-      ensureScene();
+      setSimUsable(false);
       clearRobot();
       return;
     }
+    setSimUsable(true);
+    if (currentPane() === "sim" || (!samePackage && currentPane() !== "ego")) setPane("sim");
     await loadMesh(info);
     setMode("live");
   } catch {
-    ensureScene();
+    if (state.packageId === packageId) setSimUsable(false);
     clearRobot();
   }
 }
@@ -772,6 +797,8 @@ async function load(packageId) {
 function unload() {
   state.packageId = null;
   setCameraStream("");
+  closePane();
+  setSimUsable(false);
   state.info = null;
   state.entries = [];
   state.lastPayload = null;
@@ -782,6 +809,7 @@ function unload() {
 }
 
 function focusOpen() {
+  if (!state.canSimulate) return;
   const dialog = $("sim-focus-dialog");
   const view = $("sim-viewport");
   const stage = $("sim-focus-stage");
@@ -899,15 +927,40 @@ function setEgoMode(mode) {
   layoutEgoFrame();
 }
 
+function togglePane(name) {
+  if (currentPane() === name) {
+    closePane();
+    return;
+  }
+  setPane(name);
+}
+
+function closePane() {
+  if ($("sim-focus-dialog")?.open) focusClose();
+  if ($("ego-focus-dialog")?.open) egoFocusClose();
+  const view = $("sim-viewport");
+  const ego = $("ego-viewport");
+  if (view) view.hidden = true;
+  if (ego) ego.hidden = true;
+  const host = $("sim-host");
+  host?.classList.add("is-collapsed");
+  host?.classList.remove("is-ego", "is-focused");
+  $("sim-tab-sim")?.setAttribute("aria-selected", "false");
+  $("sim-tab-ego")?.setAttribute("aria-selected", "false");
+  stopEgoStream();
+}
+
 function setPane(name) {
   const sim = name !== "ego";
   if (!sim && $("sim-focus-dialog")?.open) focusClose();
   if (sim && $("ego-focus-dialog")?.open) egoFocusClose();
+  const host = $("sim-host");
+  host?.classList.remove("is-collapsed");
   const view = $("sim-viewport");
   const ego = $("ego-viewport");
   if (view) view.hidden = !sim;
   if (ego) ego.hidden = sim;
-  $("sim-host")?.classList.toggle("is-ego", !sim);
+  host?.classList.toggle("is-ego", !sim);
   $("sim-tab-sim")?.setAttribute("aria-selected", sim ? "true" : "false");
   $("sim-tab-ego")?.setAttribute("aria-selected", sim ? "false" : "true");
   syncEgoOffline();
@@ -916,7 +969,8 @@ function setPane(name) {
     startEgoStream();
     requestAnimationFrame(layoutEgoFrame);
   }
-  if (sim) requestAnimationFrame(resizeView);
+  syncSimOffline();
+  if (sim && state.canSimulate) requestAnimationFrame(resizeView);
 }
 
 function setEgoFocusButton(open) {
@@ -1043,8 +1097,9 @@ function redrive() {
 function bindUi() {
   buildSliders();
   setMode("live");
-  $("sim-tab-sim")?.addEventListener("click", () => setPane("sim"));
-  $("sim-tab-ego")?.addEventListener("click", () => setPane("ego"));
+  syncSimOffline();
+  $("sim-tab-sim")?.addEventListener("click", () => togglePane("sim"));
+  $("sim-tab-ego")?.addEventListener("click", () => togglePane("ego"));
   $("ego-stream")?.addEventListener("load", () => {
     const status = $("ego-status");
     if (status) status.hidden = true;

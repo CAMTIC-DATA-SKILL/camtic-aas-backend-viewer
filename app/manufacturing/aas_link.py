@@ -1,7 +1,8 @@
-"""AASX 패키지의 노드·AAS 경로 해석 (DB 등록 기능 없음).
+"""AASX 패키지의 실시간 구독 경로 해석.
 
-새 매핑을 만들지 않는다. 기존 OPC-UA 구독이 쓰는 것과 같은 engineering.csv 레코드
-(`_engineering_live_nodes`: RobotKinematicState / RobotOperationalState)에서 노드와 AAS 경로를 그대로 가져온다.
+DB 등록은 ``package_sync`` 가 engineering.csv 의 저장 대상과 PLC I/O 신호를
+``equipment`` · ``equipment_node`` · ``aas_node_mapping`` 에 올린다.
+이 모듈은 감사 스크립트가 쓰는 구독 경로(RobotKinematicState / RobotOperationalState)만 고른다.
 NodeId 는 구독과 똑같이 카탈로그의 nodeIdNamespace 로 바꾼 값(예: ns=2;i=1145)을 쓴다.
 """
 

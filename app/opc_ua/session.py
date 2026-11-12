@@ -19,7 +19,11 @@ LIVE_COALESCE_S = 0.02
 
 
 class OpcUaSession:
-    """프로세스 전역 OPC-UA 접속. HTTP 요청 사이에 연결을 유지한다."""
+    """프로세스 전역 OPC-UA 접속과 화면용 최신값.
+
+    상시 구독은 발행 프로세스가 맡고, 이 세션의 최신값은 MQTT 수신으로 채울 수 있다.
+    browse·read·write 용 OPC-UA 연결은 유틸리티가 요청할 때만 연다.
+    """
 
     def __init__(self, cfg: OpcUaConfig | None = None) -> None:
         self._default_cfg = cfg or settings.opcua
@@ -37,6 +41,9 @@ class OpcUaSession:
         self._listeners: list[Callable[[DataChange, datetime], None]] = []
         self._live_queues: list[asyncio.Queue[None]] = []
         self._live_handle: asyncio.TimerHandle | None = None
+        # opcua: 이 세션의 상시 구독이 live 캐시를 채운다. mqtt: 브로커 수신이 채운다.
+        self._live_source = "opcua"
+        self._mqtt_online = False
 
     def add_listener(self, listener: Callable[[DataChange, datetime], None]) -> None:
         self._listeners.append(listener)
@@ -60,6 +67,60 @@ class OpcUaSession:
     @property
     def is_transport_connected(self) -> bool:
         return self._client is not None and self._client.is_transport_connected
+
+    @property
+    def live_source(self) -> str:
+        return self._live_source
+
+    @property
+    def mqtt_connected(self) -> bool:
+        return self._mqtt_online
+
+    @property
+    def live_online(self) -> bool:
+        """그래프 online. MQTT 경로에서는 브로커 연결, 아니면 OPC-UA 세션."""
+        if self._live_source == "mqtt":
+            return self._mqtt_online
+        return self.is_connected
+
+    def bind_mqtt_catalog(self, server_id: Optional[str], package_ids: list[str]) -> None:
+        """MQTT로 받을 패키지를 등록한다. OPC-UA 세션은 열지 않는다."""
+        self._live_source = "mqtt"
+        if server_id:
+            self._catalog_server_id = server_id
+        self._remember_packages(package_ids, replace=True)
+
+    def use_opcua_live(self) -> None:
+        """실시간 값의 원본을 이 세션의 OPC-UA 구독으로 되돌린다."""
+        self._live_source = "opcua"
+        self.set_mqtt_online(False)
+
+    async def handoff_to_mqtt(self) -> None:
+        """상시 OPC-UA 구독을 놓고 실시간 원본을 MQTT로 둔다. 수신 캐시는 유지한다."""
+        self._live_source = "mqtt"
+        self._cancel_restore()
+        async with self._lock:
+            self._desired_node_ids = []
+            self._subscribed = []
+            client = self._client
+            self._client = None
+        if client is not None:
+            await client.disconnect()
+
+    def note_package(self, package_id: str) -> None:
+        text = (package_id or "").strip()
+        if text:
+            self._remember_packages([text], replace=False)
+
+    def set_mqtt_online(self, online: bool) -> None:
+        changed = self._mqtt_online != online
+        self._mqtt_online = online
+        if changed and self._live_source == "mqtt":
+            self._schedule_live_notify()
+
+    async def apply_field_change(self, change: DataChange) -> None:
+        """OPC-UA 콜백과 같은 형식으로 live 캐시와 기록 리스너를 갱신한다."""
+        await self._on_data_change(change)
 
     @property
     def catalog_server_id(self) -> Optional[str]:
@@ -93,6 +154,8 @@ class OpcUaSession:
             "subscribePackageIds": self.subscribe_package_ids,
             "subscribedNodeIds": list(self._subscribed),
             "latestCount": len(self._latest),
+            "liveSource": self._live_source,
+            "mqttConnected": self._mqtt_online,
         }
 
     async def connect(
@@ -115,7 +178,10 @@ class OpcUaSession:
         restore = False
         async with self._lock:
             if catalog_server_id is not None:
-                self._catalog_server_id = catalog_server_id or None
+                incoming = catalog_server_id or None
+                # MQTT live 가 묶어 둔 카탈로그는 유틸리티의 빈 serverId 로 지우지 않는다.
+                if incoming or self._live_source != "mqtt":
+                    self._catalog_server_id = incoming
             if self._client is not None:
                 if self._client.is_connected and self._client.config.endpoint == cfg.endpoint:
                     logger.info(
@@ -126,9 +192,7 @@ class OpcUaSession:
                     restore = bool(self._desired_node_ids)
                 else:
                     await self._client.disconnect()
-                    self._reset_cache()
-                    self._desired_node_ids = []
-                    self._clear_packages()
+                    self._release_opcua(clear_live=self._live_source != "mqtt")
                     client = OpcUaClient(cfg)
                     await self._attach_client(client)
                     restore = False
@@ -147,10 +211,10 @@ class OpcUaSession:
             if self._client is not None:
                 await self._client.disconnect()
                 self._client = None
-            self._reset_cache()
-            self._desired_node_ids = []
-            self._catalog_server_id = None
-            self._clear_packages()
+            clear_live = self._live_source != "mqtt"
+            self._release_opcua(clear_live=clear_live)
+            if clear_live:
+                self._catalog_server_id = None
         return self.status()
 
     def require_client(self) -> OpcUaClient:
@@ -207,7 +271,8 @@ class OpcUaSession:
                 await self._client.unsubscribe_all()
             self._subscribed = []
             self._desired_node_ids = []
-            self._clear_packages()
+            if self._live_source != "mqtt":
+                self._clear_packages()
         return {"subscribedNodeIds": []}
 
     async def restore_subscription(self) -> dict[str, Any] | None:
@@ -303,8 +368,12 @@ class OpcUaSession:
             payload["namespaces"] = []
         return payload
 
-    async def _on_data_change(self, change: DataChange) -> None:
-        received_at = datetime.now(timezone.utc)
+    def remember_retained(self, change: DataChange) -> None:
+        """브로커에 남아 있던 값을 live 캐시에 넣는다. 기록 리스너는 호출하지 않는다."""
+        self._store_latest(change)
+        self._schedule_live_notify()
+
+    def _store_latest(self, change: DataChange) -> None:
         value = serialize_value(change.value)
         self._latest[change.node_id] = {
             "nodeId": change.node_id,
@@ -314,10 +383,14 @@ class OpcUaSession:
             "sourceTimestamp": change.source_timestamp.isoformat() if change.source_timestamp else None,
             "serverTimestamp": change.server_timestamp.isoformat() if change.server_timestamp else None,
         }
+
+    async def _on_data_change(self, change: DataChange) -> None:
+        received_at = datetime.now(timezone.utc)
+        self._store_latest(change)
         logger.debug(
             "OPC-UA 수신: node=%s value=%r status=%s",
             change.node_id,
-            value,
+            self._latest[change.node_id]["value"],
             change.status,
         )
         for listener in self._listeners:
@@ -386,9 +459,13 @@ class OpcUaSession:
                 logger.warning("구독 복구 실패 (%d회차)", attempt + 1, exc_info=True)
                 delay = min(delay * 2, 16.0)
 
-    def _reset_cache(self) -> None:
-        self._latest = {}
+    def _release_opcua(self, *, clear_live: bool) -> None:
+        """OPC-UA 구독만 해제한다. MQTT live 캐시와 패키지 등록은 clear_live 일 때만 지운다."""
         self._subscribed = []
+        self._desired_node_ids = []
+        if clear_live:
+            self._latest = {}
+            self._clear_packages()
 
     def _overlay(
         self,

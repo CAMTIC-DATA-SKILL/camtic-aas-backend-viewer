@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=34">
+  <link rel="stylesheet" href="style.css?v=37">
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -57,11 +57,11 @@
         <h2>상세 정보</h2>
       </div>
       <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
-      <section class="sim-host" id="sim-host">
+      <section class="sim-host is-sim-unavailable is-collapsed" id="sim-host">
         <div class="sim-toolbar">
           <span id="sim-mode" class="sim-badge">LIVE</span>
           <div class="sim-tabs" role="tablist" aria-label="렌더 보기">
-            <button type="button" role="tab" id="sim-tab-sim" aria-selected="true" aria-controls="sim-viewport">Simulation</button>
+            <button type="button" role="tab" id="sim-tab-sim" aria-selected="false" aria-controls="sim-viewport">Simulation</button>
             <button type="button" role="tab" id="sim-tab-ego" aria-selected="false" aria-controls="ego-viewport">Egocentric View</button>
           </div>
         </div>
@@ -79,6 +79,9 @@
             <div class="sim-hud">
               <span>왼쪽 드래그: 회전 / 휠: 확대 / 오른쪽: 이동</span>
               <span>연두 선: 모델 TCP 궤적 · 주황 축: 수신 TCP</span>
+            </div>
+            <div class="ego-offline" id="sim-offline" hidden>
+              <p>사용 가능한 DT 에셋이 없어 시뮬레이션을 사용할 수 없습니다.</p>
             </div>
           </div>
           <div class="ego-viewport" id="ego-viewport" data-mode="both" hidden>
@@ -401,7 +404,7 @@
   <script src="documentation.js?v=4"></script>
   <script src="live.js?v=8"></script>
   <script src="app.js?v=16"></script>
-  <script type="module" src="sim.js?v=22"></script>
+  <script type="module" src="sim.js?v=25"></script>
   <script src="tsdb-monitor.js?v=9"></script>
 </body>
 </html>

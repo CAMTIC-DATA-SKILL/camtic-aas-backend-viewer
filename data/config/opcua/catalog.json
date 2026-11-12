@@ -7,9 +7,11 @@
       "endpoint": "opc.tcp://218.158.231.215:24840",
       "securityPolicy": "None",
       "aasIds": [
-        "urn:physical-ai:aas:hyundai:hh7:template:v0.2",
         "urn:physical-ai:plc:aas:template:v0.4",
-        "urn:physical-ai:aas:hyundai:hh7:template:v0.3"
+        "urn:physical-ai:aas:hyundai:hh7:template:v0.3",
+        "urn:physical-ai:aas:epson:ls6-602:testbed:v0.1",
+        "urn:physical-ai:aas:igus:dle-dr-0001:testbed:v0.1",
+        "urn:physical-ai:aas:camtic:st-mini:template:v0.1"
       ],
       "nodeIdNamespace": 1
     }

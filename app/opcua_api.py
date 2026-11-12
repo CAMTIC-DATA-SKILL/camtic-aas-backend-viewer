@@ -12,6 +12,7 @@ from config import settings
 from utils.log_setup import LogSetup
 
 from .live_frame import frame_from_mapping
+from .mqtt_feed import MqttFeed
 from .opc_ua import OpcUaClientError, OpcUaSession
 from .opcua_catalog import CatalogServer, load_catalog
 from .opcua_export import load_engineering_nodes
@@ -61,6 +62,11 @@ def get_repository(request: Request) -> AasxRepository:
 
 def get_opcua(request: Request) -> OpcUaSession:
     return request.app.state.opcua
+
+
+def utility_connect_subscribes(mqtt_enabled: bool) -> bool:
+    """유틸리티 접속이 Variable 구독까지 할지. MQTT 경로에서는 세션만 연다."""
+    return not mqtt_enabled
 
 
 def get_package(package_id: str, repository: AasxRepository = Depends(get_repository)) -> AasxPackage:
@@ -166,7 +172,7 @@ def mapping_live_response(
         "values": mapped,
         "frame": frame_from_mapping(
             mapped,
-            connected=session.is_connected,
+            connected=session.live_online,
             package_id=package_id,
             aas_id=mapping.aas_id,
         ),
@@ -201,7 +207,7 @@ def engineering_live_response(
         "values": mapped,
         "frame": frame_from_mapping(
             mapped,
-            connected=session.is_connected,
+            connected=session.live_online,
             package_id=package_id,
             aas_id=aas_id,
         ),
@@ -301,8 +307,12 @@ def _http_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/status")
-def opcua_status(session: OpcUaSession = Depends(get_opcua)) -> dict[str, Any]:
-    return session.status()
+def opcua_status(request: Request, session: OpcUaSession = Depends(get_opcua)) -> dict[str, Any]:
+    payload = session.status()
+    feed = getattr(request.app.state, "mqtt_feed", None)
+    if feed is not None:
+        payload.update(feed.status())
+    return payload
 
 
 @router.get("/catalog")
@@ -340,6 +350,9 @@ async def opcua_reconnect(
     session: OpcUaSession = Depends(get_opcua),
     repository: AasxRepository = Depends(get_repository),
 ) -> dict[str, Any]:
+    # 화면의 기본 실시간 경로는 MQTT다. 이 호출로 엣지 상시 구독을 다시 열지 않는다.
+    if settings.mqtt.enabled:
+        return session.status()
     try:
         return await reconnect_catalog(session, repository)
     except LookupError as exc:
@@ -368,6 +381,7 @@ async def opcua_connect(
             security_policy=payload.securityPolicy,
             security_mode=payload.securityMode,
             require_server=bool(payload.serverId),
+            subscribe=utility_connect_subscribes(settings.mqtt.enabled),
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -389,6 +403,7 @@ async def connect_from_catalog(
     security_mode: Optional[str] = None,
     require_server: bool = False,
     use_default_server: bool = False,
+    subscribe: bool = True,
 ) -> dict[str, Any]:
     server: CatalogServer | None = None
     if server_id or use_default_server:
@@ -410,27 +425,36 @@ async def connect_from_catalog(
     resolved_ids = [item.strip() for item in (server.aas_ids if server else ()) if item.strip()]
     if aas_id and aas_id.strip():
         resolved_ids = [aas_id.strip()]
-    subscribe_error = await subscribe_engineering(
-        session,
-        repository,
-        aas_ids=resolved_ids,
-        package_id=(package_id or "").strip(),
-    )
+    subscribe_error = None
+    if subscribe:
+        subscribe_error = await subscribe_engineering(
+            session,
+            repository,
+            aas_ids=resolved_ids,
+            package_id=(package_id or "").strip(),
+        )
     status = session.status()
     try:
         status["namespaces"] = await session.namespaces()
     except Exception:
         status["namespaces"] = []
-    logger.info(
-        "OPC-UA 토픽 등록: endpoint=%s server=%s aasId=%s count=%d",
-        status.get("endpoint"),
-        status.get("catalogServerId") or "-",
-        ",".join(resolved_ids) or "-",
-        len(status.get("subscribedNodeIds") or []),
-    )
-    if subscribe_error:
-        status["subscribeError"] = subscribe_error
-        logger.warning("OPC-UA 매핑 구독 실패: %s", subscribe_error)
+    if subscribe:
+        logger.info(
+            "OPC-UA 토픽 등록: endpoint=%s server=%s aasId=%s count=%d",
+            status.get("endpoint"),
+            status.get("catalogServerId") or "-",
+            ",".join(resolved_ids) or "-",
+            len(status.get("subscribedNodeIds") or []),
+        )
+        if subscribe_error:
+            status["subscribeError"] = subscribe_error
+            logger.warning("OPC-UA 매핑 구독 실패: %s", subscribe_error)
+    else:
+        logger.info(
+            "OPC-UA 요청 시 연결: endpoint=%s server=%s",
+            status.get("endpoint"),
+            status.get("catalogServerId") or "-",
+        )
     return status
 
 
@@ -631,6 +655,16 @@ def opcua_package_mapping(
     return _require_mapping(package, repository).to_dict()
 
 
+async def restore_mqtt_live_cache(request: Request) -> int:
+    """발행된 노드가 캐시에 없으면 브로커의 마지막 값으로 채운다."""
+    if not settings.mqtt.enabled:
+        return 0
+    feed = getattr(request.app.state, "mqtt_feed", None)
+    if not isinstance(feed, MqttFeed):
+        return 0
+    return await feed.fill_missing_from_broker()
+
+
 def _package_live_payload(
     package: AasxPackage,
     repository: AasxRepository,
@@ -651,12 +685,14 @@ def _package_live_payload(
 
 
 @router.get("/packages/{package_id}/live")
-def opcua_package_live(
+async def opcua_package_live(
+    request: Request,
     package: AasxPackage = Depends(get_package),
     repository: AasxRepository = Depends(get_repository),
     session: OpcUaSession = Depends(get_opcua),
 ) -> dict[str, Any]:
-    """구독 캐시의 현재 스냅샷. 웹 뷰어는 이 API로 현장 구독을 걸거나 바꾸지 않는다."""
+    """구독 캐시의 현재 스냅샷. 비어 있는 발행 노드는 브로커에서 채운다."""
+    await restore_mqtt_live_cache(request)
     return _package_live_payload(package, repository, session)
 
 
@@ -678,12 +714,16 @@ async def opcua_package_live_stream(
                     try:
                         await asyncio.wait_for(queue.get(), timeout=15)
                     except asyncio.TimeoutError:
+                        if await restore_mqtt_live_cache(request):
+                            pending = True
+                            continue
                         yield ": keepalive\n\n"
                         continue
                 while not queue.empty():
                     queue.get_nowait()
                 pending = False
                 try:
+                    await restore_mqtt_live_cache(request)
                     payload = _package_live_payload(package, repository, session)
                     body = json.dumps(payload, ensure_ascii=False, allow_nan=False)
                 except Exception:

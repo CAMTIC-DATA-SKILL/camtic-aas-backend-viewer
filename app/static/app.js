@@ -567,23 +567,36 @@ function startLiveRefresh() {
 
 async function tryLoadLiveValues({ silent = false, reconnect = false } = {}) {
   if (!state.packageId || !state.tree) return;
-  if (!silent) setLiveStatus(reconnect ? "OPC-UA 연결을 확인하는 중..." : "현장 값을 읽는 중...");
+  if (!silent) setLiveStatus("현장 값을 읽는 중...");
   try {
+    const status = await fetchJson("/api/opcua/status");
+    if (status.liveSource === "mqtt") {
+      const frame = await pullLiveFrame();
+      applyLiveFrame(frame);
+      startLiveRefresh();
+      if (
+        !status.mqttConnected &&
+        frame.subscribeMatch !== false &&
+        !(frame.values || []).length &&
+        !silent
+      ) {
+        setLiveStatus("MQTT 브로커 연결을 기다리는 중...");
+      }
+      return;
+    }
     if (reconnect) {
-      const status = await fetchJson("/api/opcua/reconnect", { method: "POST" });
-      if (!status.connected) {
+      if (!silent) setLiveStatus("OPC-UA 연결을 확인하는 중...");
+      const reconnected = await fetchJson("/api/opcua/reconnect", { method: "POST" });
+      if (!reconnected.connected) {
         stopLiveRefresh();
         setLiveStatus("OPC-UA 재연결에 실패했습니다.", true);
         return;
       }
       if (!silent) setLiveStatus("현장 값을 읽는 중...");
-    } else {
-      const status = await fetchJson("/api/opcua/status");
-      if (!status.connected) {
-        stopLiveRefresh();
-        setLiveStatus(silent ? "" : "OPC-UA에 먼저 접속하세요. 유틸리티 → OPC-UA", !silent);
-        return;
-      }
+    } else if (!status.connected) {
+      stopLiveRefresh();
+      setLiveStatus(silent ? "" : "OPC-UA에 먼저 접속하세요. 유틸리티 → OPC-UA", !silent);
+      return;
     }
     applyLiveFrame(await pullLiveFrame());
     startLiveRefresh();

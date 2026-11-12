@@ -68,6 +68,7 @@ class ManufacturingRuntime:
     recorder: Any = None     # OpcUaRecorder (MFG_RECORD_OPCUA)
     opcua: Any = None        # OpcUaSession (구독 설정 확인용)
     alarms: Any = None       # AlarmEngine
+    package_sync: Any = None  # PackageSync (AASX 템플릿 → 설비 메타)
 
 
 def error(status: int, code: str, message: str) -> HTTPException:
@@ -317,12 +318,16 @@ async def ts_db_status(runtime: ManufacturingRuntime = Depends(get_runtime)):
     status["ingest_performance"] = INGEST_STATS.snapshot()
     status["alarm_engine"] = runtime.alarms.status() if runtime.alarms else {"enabled": False}
     status["opcua_recorder"] = runtime.recorder.status() if runtime.recorder else {"enabled": False}
+    status["package_sync"] = runtime.package_sync.status() if runtime.package_sync else {"enabled": False}
     if runtime.opcua is not None:
         opcua = runtime.opcua.status()
         status["opcua_subscription"] = {
             "connected": opcua.get("connected"), "endpoint": opcua.get("endpoint"),
             "package": opcua.get("subscribePackageId"), "subscribed_nodes": len(opcua.get("subscribedNodeIds") or []),
-            "receiving_nodes": opcua.get("latestCount"), **(opcua.get("subscription") or {}),
+            "receiving_nodes": opcua.get("latestCount"),
+            "live_source": opcua.get("liveSource"),
+            "mqtt_connected": opcua.get("mqttConnected"),
+            **(opcua.get("subscription") or {}),
         }
     return status
 

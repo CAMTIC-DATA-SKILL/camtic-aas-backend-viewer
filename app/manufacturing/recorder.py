@@ -1,7 +1,9 @@
-"""기존 OPC-UA 구독(OpcUaSession) 수신값을 TimescaleDB 에 기록한다 (data_source = REAL).
+"""OPC-UA 구독 또는 MQTT 수신값을 TimescaleDB 에 기록한다 (data_source = REAL).
 
-구독 구조는 바꾸지 않는다. 세션의 수신 콜백에 리스너로 붙어 메모리 버퍼에 쌓고, 0.5초마다 배치로 저장한다.
+세션의 수신 콜백에 리스너로 붙어 메모리 버퍼에 쌓고, 0.5초마다 배치로 저장한다.
+MQTT 경로에서는 발행 프로세스가 올린 값이 같은 콜백으로 들어온다.
 어느 설비의 값인지는 DB 에 등록된 REAL 설비 중 opcua_endpoint 가 지금 접속한 서버와 같은 설비의 노드로 정한다.
+같은 NodeId 가 설비 둘 이상에 있으면 MFG_EQUIPMENT_ID 를 우선한다.
 노드별 실제 수신 간격(source timestamp 기준)을 재서 100ms 수집 여부를 확인할 수 있게 한다.
 """
 
@@ -127,14 +129,17 @@ class OpcUaRecorder:
         index: dict[str, str] = {}
         if endpoint:
             async with self.runtime.sessions() as session:
-                rows = await session.execute(
+                rows = list((await session.execute(
                     select(EquipmentNode.node_id, EquipmentNode.equipment_id)
                     .join(Equipment, Equipment.equipment_id == EquipmentNode.equipment_id)
                     .where(Equipment.data_source == "REAL", Equipment.enabled, EquipmentNode.enabled,
-                           Equipment.opcua_endpoint == endpoint,
-                           Equipment.equipment_id == self.runtime.cfg.equipment_id)
-                )
-                index = {r.node_id: r.equipment_id for r in rows}
+                           Equipment.opcua_endpoint == endpoint)
+                )).all())
+            preferred = self.runtime.cfg.equipment_id
+            for row in rows:
+                current = index.get(row.node_id)
+                if current is None or (row.equipment_id == preferred and current != preferred):
+                    index[row.node_id] = row.equipment_id
         self._index = index
         self.indexed_endpoint = endpoint
 
