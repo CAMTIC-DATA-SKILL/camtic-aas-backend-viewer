@@ -22,6 +22,12 @@ MAX_POINTS = 5_000
 MAX_NODES = 20
 MIN_BUCKET_SECONDS = 0.1
 STALE_FACTOR = 50  # sampling_ms × 50 (100ms 노드는 5초) 동안 수신이 없으면 끊긴 것으로 본다
+# 기록 flush(0.5s)·화면 갱신(2s)보다 짧으면, 10ms 샘플링 노드가 수신 중인데도 STALE 로 표시된다.
+MIN_STALE = timedelta(seconds=5)
+
+
+def stale_timeout(sampling_ms: int) -> timedelta:
+    return max(MIN_STALE, timedelta(milliseconds=max(1, int(sampling_ms or 0)) * STALE_FACTOR))
 
 
 class QueryError(ValueError):

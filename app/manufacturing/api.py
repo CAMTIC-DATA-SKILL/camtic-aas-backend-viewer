@@ -305,12 +305,13 @@ async def ts_stream(
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@read.get("/db-status", summary="DB·TimescaleDB·하이퍼테이블 상태, 저장량, 수신 지연, 품질, OPC-UA 기록 상태")
+@read.get("/db-status", summary="DB·TimescaleDB·하이퍼테이블·리소스(접속·캐시·부하) 상태, 저장량, 수신 지연, 품질, OPC-UA 기록 상태")
 async def ts_db_status(runtime: ManufacturingRuntime = Depends(get_runtime)):
     try:
         async with runtime.sessions() as session:
             status = await monitor.db_status(session)
             status["storage"] = await monitor.storage(session)
+            status["resources"] = await monitor.db_resources(session)
     except Exception as exc:
         if not is_db_unavailable(exc):
             raise

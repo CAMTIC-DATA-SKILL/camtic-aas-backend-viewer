@@ -810,7 +810,8 @@ html.sim-modal-open body {
 html.sim-modal-open .topbar,
 html.sim-modal-open .view-tabs,
 html.sim-modal-open .layout,
-html.sim-modal-open .tsdb-view {
+html.sim-modal-open .tsdb-view,
+html.sim-modal-open #mcap-view {
   pointer-events: none;
   user-select: none;
 }
@@ -1573,3 +1574,170 @@ body:has(.view-tabs) .layout { height: calc(100vh - 88px); }
 .sev-tag.WARNING { background: #f5b83d; color: #3d2a00; }
 .sev-tag.INFO { background: #d8e7fb; color: #194a8c; }
 .tsdb-table tr.alarm-active td { background: #fff6f5; }
+
+.mcap-view #mcap-banner {
+  overflow: hidden;
+}
+.mcap-view #mcap-banner code {
+  display: inline-block;
+  max-width: min(100%, 42ch);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.mcap-view #mcap-cards {
+  min-width: 0;
+}
+.mcap-view #mcap-cards .tsdb-card {
+  min-width: 0;
+  overflow: hidden;
+}
+.mcap-view #mcap-cards .tsdb-card .v,
+.mcap-view #mcap-cards .tsdb-card .s {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcap-view #mcap-cards .mcap-file-card .v {
+  font-size: 14px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.mcap-view #mcap-cards .mcap-file-card .s {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.mcap-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: calc(100vh - 140px);
+  min-width: 0;
+}
+.mcap-main,
+.mcap-files-panel {
+  min-width: 0;
+}
+.mcap-files-panel { position: sticky; top: 12px; }
+.mcap-files-panel #mcap-file-filter {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border: 1px solid #dde3ea;
+  border-radius: 4px;
+}
+.mcap-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+.mcap-file-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid #dde3ea;
+  border-radius: 6px;
+  background: #fff;
+  color: #1b2b45;
+  cursor: pointer;
+}
+.mcap-file-item:hover { border-color: #9cbcef; background: #f5f9ff; }
+.mcap-file-item[aria-selected="true"] {
+  border-color: #1d63c9;
+  background: #e3edfc;
+}
+.mcap-file-item .name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.mcap-file-item .meta {
+  font-size: 11px;
+  color: #6b7785;
+  font-variant-numeric: tabular-nums;
+}
+.mcap-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mcap-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mcap-subtabs button {
+  border: 1px solid #dde3ea;
+  background: #fff;
+  color: #425466;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.mcap-subtabs button[aria-selected="true"] {
+  background: #e3edfc;
+  border-color: #9cbcef;
+  color: #1554ad;
+  font-weight: 600;
+}
+.mcap-section-title {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  color: #334155;
+}
+.mcap-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #6b7785;
+}
+.mcap-code {
+  margin: 0;
+  padding: 10px 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  overflow: auto;
+  max-height: 220px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.mcap-schema-list { display: flex; flex-direction: column; gap: 10px; }
+.mcap-schema-card {
+  border: 1px solid #dde3ea;
+  border-radius: 6px;
+  padding: 10px;
+  background: #fff;
+}
+.mcap-schema-card h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.mcap-schema-card .meta {
+  font-size: 11px;
+  color: #6b7785;
+  margin-bottom: 6px;
+}
+.mcap-payload {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  max-width: 420px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 960px) {
+  .mcap-layout { grid-template-columns: minmax(0, 1fr); }
+  .mcap-files-panel { position: static; }
+  .mcap-file-list { max-height: 220px; }
+}

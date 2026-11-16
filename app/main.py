@@ -16,6 +16,7 @@ from .manufacturing.db import create_engine, create_sessionmaker
 from .manufacturing.ingest import NodeCache
 from .manufacturing.package_sync import PackageSync, SyncContext
 from .manufacturing.recorder import OpcUaRecorder
+from .mcap_api import router as mcap_router
 from .mqtt_api import router as mqtt_router
 from .mqtt_feed import MqttFeed
 from .opc_ua import OpcUaSession
@@ -130,6 +131,13 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
         logger.info("Archive: %s", storage.archive_dir)
         logger.info("OPC-UA catalog: %s", storage.opcua_catalog_dir)
         logger.info("Mappings: %s", storage.mappings_dir)
+        if app_settings.mcap.enabled:
+            archive = app_settings.mcap.archive_dir
+            logger.info(
+                "MCAP 탭: archive=%s (%s)",
+                archive,
+                "있음" if archive and archive.is_dir() else "없음",
+            )
         repository.reload()
         _ensure_artifacts(repository)
         mfg = app_settings.manufacturing
@@ -220,6 +228,7 @@ def create_app(app_settings: Settings = settings) -> FastAPI:
     app.include_router(mqtt_router)
     app.include_router(camera_router)
     app.include_router(manufacturing_router)
+    app.include_router(mcap_router)
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="viewer")
     return app
 

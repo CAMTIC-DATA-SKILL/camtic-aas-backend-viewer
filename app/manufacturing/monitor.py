@@ -15,7 +15,7 @@ from sqlalchemy import ARRAY, Integer, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Equipment
-from .queries import STALE_FACTOR, value_of
+from .queries import stale_timeout, value_of
 from .values import quality_class
 
 WINDOW_S = 60  # SQL 의 make_interval(secs => 60) 과 같아야 한다
@@ -42,7 +42,7 @@ async def summary(session: AsyncSession) -> dict[str, Any]:
             SELECT count(*) FROM manufacturing.opcua_sample
             WHERE node_pk = ANY(:pks) AND ts >= now() - make_interval(secs => 60)
         """).bindparams(bindparam("pks", type_=ARRAY(Integer))), {"pks": pks})).scalar_one()
-    fresh = [r for r in nodes if r.received_at and now - r.received_at <= timedelta(milliseconds=r.sampling_ms * STALE_FACTOR)]
+    fresh = [r for r in nodes if r.received_at and now - r.received_at <= stale_timeout(r.sampling_ms)]
     by_type: dict[str, int] = {}
     by_source: dict[str, int] = {}
     for row in eq:
@@ -104,7 +104,7 @@ async def nodes(
     now = datetime.now(timezone.utc)
     out = []
     for r in rows:
-        stale = r.received_at is None or now - r.received_at > timedelta(milliseconds=r.sampling_ms * STALE_FACTOR)
+        stale = r.received_at is None or now - r.received_at > stale_timeout(r.sampling_ms)
         out.append({
             "equipment_id": r.equipment_id, "equipment_type": r.equipment_type, "data_source": r.data_source,
             "node_id": r.node_id, "node_pk": r.node_pk, "node_name": r.node_name, "data_type": r.data_type,
@@ -246,6 +246,105 @@ async def db_status(session: AsyncSession) -> dict[str, Any]:
         "since_last_write_s": round((datetime.now(timezone.utc) - latest.last_write).total_seconds(), 1)
         if latest.last_write else None,
         "latest_quality": {"good": latest.good, "uncertain": latest.uncertain, "bad": latest.bad},
+    }
+
+
+async def db_resources(session: AsyncSession) -> dict[str, Any]:
+    """PostgreSQL/TimescaleDB 리소스·부하 지표 (카탈로그·통계만, 테이블 스캔 없음)."""
+    settings_rows = (await session.execute(text("""
+        SELECT name, setting, unit, source
+        FROM pg_settings
+        WHERE name IN (
+          'max_connections', 'shared_buffers', 'effective_cache_size', 'work_mem',
+          'maintenance_work_mem', 'max_worker_processes', 'max_parallel_workers',
+          'timescaledb.max_background_workers', 'wal_level', 'max_wal_size',
+          'autovacuum', 'shared_preload_libraries'
+        )
+        ORDER BY name
+    """))).mappings().all()
+    settings = {r["name"]: {"value": r["setting"], "unit": r["unit"], "source": r["source"]} for r in settings_rows}
+
+    activity = (await session.execute(text("""
+        SELECT
+          count(*) FILTER (WHERE backend_type = 'client backend') AS client_total,
+          count(*) FILTER (WHERE backend_type = 'client backend' AND state = 'active') AS active,
+          count(*) FILTER (WHERE backend_type = 'client backend' AND state = 'idle') AS idle,
+          count(*) FILTER (WHERE backend_type = 'client backend'
+                           AND state = 'idle in transaction') AS idle_in_transaction,
+          count(*) FILTER (WHERE wait_event_type = 'Lock') AS waiting_locks,
+          count(*) FILTER (WHERE backend_type LIKE 'TimescaleDB%') AS timescale_workers,
+          count(*) FILTER (WHERE backend_type = 'autovacuum worker') AS autovacuum_workers,
+          max(extract(epoch FROM now() - query_start))
+            FILTER (WHERE backend_type = 'client backend' AND state = 'active'
+                    AND query NOT ILIKE '%pg_stat_activity%') AS longest_query_s
+        FROM pg_stat_activity
+        WHERE datname = current_database() OR datname IS NULL
+    """))).one()
+
+    by_state = (await session.execute(text("""
+        SELECT coalesce(state, backend_type) AS label, count(*) AS n
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+        GROUP BY 1
+        ORDER BY n DESC
+    """))).mappings().all()
+
+    dbstat = (await session.execute(text("""
+        SELECT numbackends, xact_commit, xact_rollback, blks_read, blks_hit,
+               tup_returned, tup_fetched, tup_inserted, tup_updated, tup_deleted,
+               conflicts, deadlocks, temp_files, temp_bytes,
+               stats_reset
+        FROM pg_stat_database
+        WHERE datname = current_database()
+    """))).one()
+    hits = (dbstat.blks_hit or 0) + (dbstat.blks_read or 0)
+    cache_hit_ratio = round(dbstat.blks_hit / hits, 4) if hits else None
+    commits = (dbstat.xact_commit or 0) + (dbstat.xact_rollback or 0)
+    rollback_ratio = round(dbstat.xact_rollback / commits, 4) if commits else None
+
+    max_conn = int(settings.get("max_connections", {}).get("value") or 0) or None
+    client_total = activity.client_total or 0
+    conn_ratio = round(client_total / max_conn, 4) if max_conn else None
+
+    return {
+        "connections": {
+            "client_total": client_total,
+            "active": activity.active or 0,
+            "idle": activity.idle or 0,
+            "idle_in_transaction": activity.idle_in_transaction or 0,
+            "waiting_locks": activity.waiting_locks or 0,
+            "max_connections": max_conn,
+            "usage_ratio": conn_ratio,
+            "timescale_workers": activity.timescale_workers or 0,
+            "autovacuum_workers": activity.autovacuum_workers or 0,
+            "longest_query_s": round(activity.longest_query_s, 1) if activity.longest_query_s is not None else None,
+            "by_state": [dict(r) for r in by_state],
+        },
+        "cache": {
+            "blks_hit": dbstat.blks_hit,
+            "blks_read": dbstat.blks_read,
+            "hit_ratio": cache_hit_ratio,
+        },
+        "activity": {
+            "xact_commit": dbstat.xact_commit,
+            "xact_rollback": dbstat.xact_rollback,
+            "rollback_ratio": rollback_ratio,
+            "tup_returned": dbstat.tup_returned,
+            "tup_fetched": dbstat.tup_fetched,
+            "tup_inserted": dbstat.tup_inserted,
+            "tup_updated": dbstat.tup_updated,
+            "tup_deleted": dbstat.tup_deleted,
+            "conflicts": dbstat.conflicts,
+            "deadlocks": dbstat.deadlocks,
+            "temp_files": dbstat.temp_files,
+            "temp_bytes": dbstat.temp_bytes,
+            "numbackends": dbstat.numbackends,
+            "stats_reset": dbstat.stats_reset,
+        },
+        "settings": [
+            {"name": name, **meta} for name, meta in settings.items()
+        ],
+        "measured_at": datetime.now(timezone.utc),
     }
 
 

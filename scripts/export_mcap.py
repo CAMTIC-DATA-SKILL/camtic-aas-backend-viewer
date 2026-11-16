@@ -6,6 +6,9 @@
 예 (camtic-aas-backend-viewer 루트):
     python scripts/export_mcap.py
     python scripts/export_mcap.py --equipment ROBOT_FIELD_01 --output ../mcap/hh7.mcap
+    python scripts/export_mcap.py --equipment ROBOT_FIELD_01 \\
+        --start 2026-11-11T09:00:00Z --end 2026-11-11T10:00:00Z \\
+        --output ../mcap/HH7_20261111_090000.mcap
 """
 
 from __future__ import annotations
@@ -188,18 +191,28 @@ def load_nodes(db: Db, equipment: str | None) -> list[Node]:
     return nodes
 
 
-def copy_sql(node: Node, limit_per_node: int | None) -> str:
+def copy_sql(
+    node: Node,
+    limit_per_node: int | None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> str:
     if node.kind == "boolean":
         value_expr = "CASE WHEN value_bool THEN 'true' WHEN value_bool IS FALSE THEN 'false' ELSE '' END"
     elif node.kind == "text":
         value_expr = "value_text"
     else:
         value_expr = "value_num"
+    where = [f"node_pk = {node.node_pk}"]
+    if start is not None:
+        where.append(f"ts >= '{start.astimezone(timezone.utc).isoformat()}'::timestamptz")
+    if end is not None:
+        where.append(f"ts < '{end.astimezone(timezone.utc).isoformat()}'::timestamptz")
     limit_sql = f" LIMIT {int(limit_per_node)}" if limit_per_node else ""
     return f"""COPY (
 SELECT (floor(extract(epoch FROM ts) * 1000))::bigint, {value_expr}, quality
 FROM manufacturing.opcua_sample
-WHERE node_pk = {node.node_pk}
+WHERE {' AND '.join(where)}
 ORDER BY ts{limit_sql}
 ) TO STDOUT WITH (FORMAT csv, NULL '')"""
 
@@ -254,13 +267,20 @@ ENCODERS = {
 }
 
 
-def open_stream(db: Db, node: Node, limit_per_node: int | None, err_dir: Path) -> SampleStream:
+def open_stream(
+    db: Db,
+    node: Node,
+    limit_per_node: int | None,
+    err_dir: Path,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> SampleStream:
     err_path = err_dir / f"{node.node_pk}.err"
     err_file = err_path.open("wb")
     proc = subprocess.Popen(
         [
             "psql", "-h", db.host, "-p", db.port, "-U", db.user, "-d", db.name,
-            "-v", "ON_ERROR_STOP=1", "-q", "-c", copy_sql(node, limit_per_node),
+            "-v", "ON_ERROR_STOP=1", "-q", "-c", copy_sql(node, limit_per_node, start, end),
         ],
         env=db.env(),
         stdout=subprocess.PIPE,
@@ -289,7 +309,14 @@ def stream_error(stream: SampleStream, err_dir: Path) -> str | None:
     return f"node {stream.node.node_pk} {stream.node.topic}: {detail}"
 
 
-def export(db: Db, nodes: list[Node], output: Path, limit_per_node: int | None) -> None:
+def export(
+    db: Db,
+    nodes: list[Node],
+    output: Path,
+    limit_per_node: int | None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     partial = output.with_suffix(output.suffix + ".partial")
     err_dir = output.parent / f".{output.name}.errors"
@@ -298,7 +325,7 @@ def export(db: Db, nodes: list[Node], output: Path, limit_per_node: int | None) 
     started = time.monotonic()
     written = 0
     try:
-        streams = [open_stream(db, node, limit_per_node, err_dir) for node in nodes]
+        streams = [open_stream(db, node, limit_per_node, err_dir, start, end) for node in nodes]
         with partial.open("wb") as handle:
             writer = Writer(handle, chunk_size=4 * 1024 * 1024, compression=CompressionType.ZSTD)
             writer.start(profile="", library="camtic-aas-backend-viewer export_mcap")
@@ -324,13 +351,18 @@ def export(db: Db, nodes: list[Node], output: Path, limit_per_node: int | None) 
                 )
                 encoders[node.node_pk] = ENCODERS[node.kind]
             equipment = sorted({node.equipment_id for node in nodes})
-            writer.add_metadata("opcua_sample", {
+            meta = {
                 "database": db.name,
                 "table": "manufacturing.opcua_sample",
                 "time_column": "ts",
                 "equipment": ",".join(equipment),
                 "channels": str(len(nodes)),
-            })
+            }
+            if start is not None:
+                meta["start"] = start.astimezone(timezone.utc).isoformat()
+            if end is not None:
+                meta["end"] = end.astimezone(timezone.utc).isoformat()
+            writer.add_metadata("opcua_sample", meta)
             heap: list[tuple[int, int, int]] = []
             for index, stream in enumerate(streams):
                 if stream.pull():
@@ -389,14 +421,30 @@ def verify(output: Path, written: int) -> None:
     )
 
 
+def parse_time(raw: str) -> datetime:
+    text = raw.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    dt = datetime.fromisoformat(text)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export opcua_sample rows to MCAP.")
     parser.add_argument("--equipment", help="equipment_id to export. Default: every equipment that has samples.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--limit-per-node", type=int, help="Export only the first N samples of each node.")
+    parser.add_argument("--start", help="Inclusive start timestamptz (ISO-8601).")
+    parser.add_argument("--end", help="Exclusive end timestamptz (ISO-8601).")
     args = parser.parse_args()
     if args.limit_per_node is not None and args.limit_per_node < 1:
         parser.error("--limit-per-node must be >= 1")
+    start = parse_time(args.start) if args.start else None
+    end = parse_time(args.end) if args.end else None
+    if start and end and end <= start:
+        parser.error("--end must be after --start")
     try:
         db = db_from_env()
         nodes = load_nodes(db, args.equipment)
@@ -405,7 +453,9 @@ def main() -> int:
             return 1
         for node in nodes:
             print(f"channel {node.topic} {node.data_type} {node.unit}".rstrip(), flush=True)
-        export(db, nodes, args.output, args.limit_per_node)
+        if start or end:
+            print(f"window start={start} end={end}", flush=True)
+        export(db, nodes, args.output, args.limit_per_node, start, end)
     except Exception as exc:
         print(f"export failed: {exc}", file=sys.stderr)
         return 1

@@ -4,14 +4,15 @@
     {
       "id": "default",
       "name": "Local OPC-UA",
-      "endpoint": "opc.tcp://218.158.231.215:24840",
+      "endpoint": "opc.tcp://100.82.121.118:4840",
       "securityPolicy": "None",
       "aasIds": [
         "urn:physical-ai:plc:aas:template:v0.4",
         "urn:physical-ai:aas:hyundai:hh7:template:v0.3",
         "urn:physical-ai:aas:epson:ls6-602:testbed:v0.1",
         "urn:physical-ai:aas:igus:dle-dr-0001:testbed:v0.1",
-        "urn:physical-ai:aas:camtic:st-mini:template:v0.1"
+        "urn:physical-ai:aas:camtic:st-mini:template:v0.1",
+        "urn:physical-ai:aas:doosan:m1509:T1Z5B7:v0.3"
       ],
       "nodeIdNamespace": 1
     }

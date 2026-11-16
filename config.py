@@ -388,6 +388,31 @@ def load_mqtt_config() -> MqttConfig:
 
 
 @dataclass(frozen=True)
+class McapConfig:
+    """로컬 MCAP 재생 탭. 아카이브 폴더의 .mcap 만 읽는다. 기본 선택 파일은 없다."""
+
+    enabled: bool = False
+    archive_dir: Optional[Path] = None
+
+
+def load_mcap_config() -> McapConfig:
+    enabled = _bool("MCAP_ENABLED", False)
+    archive_raw = os.environ.get("MCAP_ARCHIVE_DIR", "").strip()
+    path_raw = os.environ.get("MCAP_PATH", "").strip()  # 하위 호환: 파일 또는 폴더
+
+    archive_dir: Optional[Path] = None
+    if archive_raw:
+        archive_dir = _path(archive_raw)
+    elif path_raw:
+        path = _path(path_raw)
+        archive_dir = path if path.is_dir() else path.parent
+    elif enabled:
+        archive_dir = (BASE_DIR.parent / "mcap").resolve()
+
+    return McapConfig(enabled=enabled, archive_dir=archive_dir)
+
+
+@dataclass(frozen=True)
 class Settings:
     storage: StorageLayout
 
@@ -405,6 +430,7 @@ class Settings:
     opcua: OpcUaConfig
     manufacturing: ManufacturingConfig
     mqtt: MqttConfig
+    mcap: McapConfig
 
 
 def load_settings() -> Settings:
@@ -452,6 +478,7 @@ def load_settings() -> Settings:
         opcua=opcua,
         manufacturing=load_manufacturing_config(),
         mqtt=load_mqtt_config(),
+        mcap=load_mcap_config(),
     )
 
 

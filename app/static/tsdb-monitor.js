@@ -1,11 +1,10 @@
 "use strict";
 
 // TimescaleDB 모니터링 탭. app.js 의 $, el, fetchJson, state(트리·선택 노드)를 그대로 쓴다.
-// 100ms 저장과 화면 갱신을 분리한다: 스트림은 서버가 1초마다 묶어 보내고(SSE), 요약은 2초, DB 상태는 5초마다 읽는다.
+// 스트림은 서버가 1초마다 묶어 보내고(SSE), 요약은 2초, DB 리소스·상태는 5초마다 읽는다.
 
 (() => {
   const API = "/api/v1/timeseries";
-  const RT_WINDOW_MS = 60_000;
   const COLORS = ["#1d63c9", "#d92d20", "#1f7a45", "#8a5a00", "#7a3fc0", "#0f7c8a", "#c2410c", "#475569"];
 
   const tsdb = {
@@ -17,7 +16,6 @@
     streamPaused: false,
     streamRows: [],
     lastStreamRowAt: 0,
-    rt: { equipment: "", nodes: [], chart: null, cursor: null, paused: false, data: new Map(), busy: false },
     hist: { chart: null },
     linked: null, // AAS 에서 고른 Property 에 연결된 노드
   };
@@ -36,6 +34,12 @@
     return String(v);
   };
   const fmtBytes = (b) => (b == null ? "-" : b > 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${(b / 1e6).toFixed(1)} MB`);
+  const fmtPct = (ratio) => (ratio == null ? "-" : `${Math.round(ratio * 1000) / 10}%`);
+  const fmtSetting = (s) => {
+    if (!s) return "-";
+    const unit = s.unit && s.unit !== "" ? ` ${s.unit}` : "";
+    return `${s.value}${unit}`;
+  };
   const sourceBadge = (source) =>
     el("span", { className: "badge real" }, source || "REAL");
   const qualityTag = (q) => el("span", { className: `q-tag ${q}` }, q);
@@ -75,14 +79,23 @@
   // ---------------------------------------------------------------- 탭 전환
 
   function setTab(name) {
-    const tsdbOn = name === "tsdb";
-    $("layout").hidden = tsdbOn;
-    $("tsdb-view").hidden = !tsdbOn;
-    $("tab-aasx").setAttribute("aria-selected", String(!tsdbOn));
-    $("tab-tsdb").setAttribute("aria-selected", String(tsdbOn));
-    if (tsdbOn) start();
+    const view = name === "tsdb" || name === "mcap" ? name : "aasx";
+    $("layout").hidden = view !== "aasx";
+    $("tsdb-view").hidden = view !== "tsdb";
+    const mcapView = $("mcap-view");
+    if (mcapView) mcapView.hidden = view !== "mcap";
+    $("tab-aasx").setAttribute("aria-selected", String(view === "aasx"));
+    $("tab-tsdb").setAttribute("aria-selected", String(view === "tsdb"));
+    const tabMcap = $("tab-mcap");
+    if (tabMcap) tabMcap.setAttribute("aria-selected", String(view === "mcap"));
+    if (view === "tsdb") start();
     else stop();
-    if (location.hash !== (tsdbOn ? "#tsdb" : "")) history.replaceState(null, "", tsdbOn ? "#tsdb" : location.pathname + location.search);
+    if (window.McapViewer) {
+      if (view === "mcap") window.McapViewer.start();
+      else window.McapViewer.stop();
+    }
+    const hash = view === "aasx" ? "" : `#${view}`;
+    if (location.hash !== hash) history.replaceState(null, "", hash || location.pathname + location.search);
   }
 
   async function start() {
@@ -96,8 +109,6 @@
     if (!tsdb.timers.length) {
       every(2000, refreshSummary);
       every(5000, refreshDbStatus);
-      every(1000, refreshRealtime);
-      every(2000, refreshAlarms);
       every(2000, refreshNodes);
     }
     openStream();
@@ -121,7 +132,6 @@
     }
     const label = (e) => `${e.equipment_id} · ${e.equipment_name} [${e.data_source || "REAL"}]`;
     fillSelect($("stream-equipment"), tsdb.equipment, { value: (e) => e.equipment_id, label, empty: "전체" });
-    fillSelect($("rt-equipment"), tsdb.equipment, { value: (e) => e.equipment_id, label });
     fillSelect($("hist-equipment"), tsdb.equipment, { value: (e) => e.equipment_id, label });
     fillSelect($("node-equipment"), tsdb.equipment, { value: (e) => e.equipment_id, label });
     if (!$("node-equipment").dataset.touched) {
@@ -130,7 +140,6 @@
       $("node-equipment").dataset.touched = "1";
     }
     refreshStreamNodes();
-    renderNodePicker("rt");
     renderNodePicker("hist");
   }
 
@@ -142,7 +151,7 @@
     const equipmentId = $(`${kind}-equipment`).value;
     const box = $(`${kind}-nodes`);
     const before = new Set([...box.querySelectorAll("input:checked")].map((i) => i.value));
-    const nodes = kind === "rt" ? numericNodes(equipmentId) : tsdb.nodesByEquipment.get(equipmentId) || [];
+    const nodes = tsdb.nodesByEquipment.get(equipmentId) || [];
     let chosen = preselect ? new Set(preselect) : before;
     if (![...chosen].some((id) => nodes.some((n) => n.node_id === id))) {
       chosen = new Set(numericNodes(equipmentId).slice(0, 3).map((n) => n.node_id));
@@ -150,8 +159,7 @@
     box.replaceChildren(
       ...nodes.map((n) =>
         el("label", { title: n.node_id },
-          el("input", { type: "checkbox", value: n.node_id, checked: chosen.has(n.node_id) ? "checked" : null,
-                        onchange: () => (kind === "rt" ? resetRealtime() : null) }),
+          el("input", { type: "checkbox", value: n.node_id, checked: chosen.has(n.node_id) ? "checked" : null }),
           nodeLabel(n)),
       ),
     );
@@ -222,16 +230,13 @@
       ]),
       result.nodes.length > 1 ? " — 지금 수신 중인 실제(REAL) 설비를 우선 선택했습니다." : "",
     );
-    for (const kind of ["rt", "hist"]) {
-      $(`${kind}-equipment`).value = target.equipment_id;
-      renderNodePicker(kind, [target.node_id]);
-    }
+    $("hist-equipment").value = target.equipment_id;
+    renderNodePicker("hist", [target.node_id]);
     $("stream-equipment").value = target.equipment_id;
     $("node-equipment").value = target.equipment_id;
     refreshNodes();
     refreshStreamNodes();
     $("stream-node").value = target.node_id;
-    resetRealtime();
     openStream();
     runHistory();
   }
@@ -271,11 +276,6 @@
         `목표 ${s.target_rows_per_s_receiving}/s (수신 노드) · 전체 ${s.target_rows_per_s_all_nodes}/s`,
         ratio == null ? "" : ratio >= 0.95 ? "ok" : "bad"),
       card("DB 연결", s.db_connected ? "정상" : "끊김", "TimescaleDB", s.db_connected ? "ok" : "bad"),
-      (() => {
-        const a = s.active_alarms || {};
-        const total = (a.CRITICAL || 0) + (a.WARNING || 0) + (a.INFO || 0);
-        return card("진행 중 알람", total, `CRITICAL ${a.CRITICAL || 0} · WARNING ${a.WARNING || 0}`, total ? "bad" : "ok");
-      })(),
     );
   }
 
@@ -362,21 +362,11 @@
     );
   }
 
-  // ---------------------------------------------------------------- 실시간 그래프
+  // ---------------------------------------------------------------- 과거 데이터
 
-  function resetRealtime() {
-    tsdb.rt.cursor = null;
-    tsdb.rt.data = new Map();
-    if (tsdb.rt.chart) {
-      tsdb.rt.chart.data.datasets = [];
-      tsdb.rt.chart.update("none");
-    }
-    refreshRealtime();
-  }
-
-  function ensureChart(kind, canvasId) {
-    if (tsdb[kind].chart) return tsdb[kind].chart;
-    tsdb[kind].chart = new Chart($(canvasId), {
+  function ensureHistChart() {
+    if (tsdb.hist.chart) return tsdb.hist.chart;
+    tsdb.hist.chart = new Chart($("hist-chart"), {
       type: "line",
       data: { datasets: [] },
       options: {
@@ -395,50 +385,8 @@
                    tooltip: { callbacks: { title: (items) => fmtTime(items[0]?.parsed.x) } } },
       },
     });
-    return tsdb[kind].chart;
+    return tsdb.hist.chart;
   }
-
-  async function refreshRealtime() {
-    const rt = tsdb.rt;
-    const equipmentId = $("rt-equipment").value;
-    const nodes = pickedNodes("rt");
-    if (!tsdb.visible || rt.paused || rt.busy || !equipmentId || !nodes.length) return;
-    rt.busy = true;
-    try {
-      const now = Date.now();
-      const start = rt.cursor ? new Date(rt.cursor) : new Date(now - RT_WINDOW_MS);
-      const params = new URLSearchParams({ equipment_id: equipmentId, start: start.toISOString(), mode: "raw", limit: "10000" });
-      nodes.forEach((n) => params.append("node_id", n));
-      const result = await api(`/history?${params}`);
-      for (const series of result.series) {
-        const points = rt.data.get(series.node_id) || [];
-        for (const s of series.samples || []) {
-          const t = Date.parse(s.ts);
-          if (typeof s.value === "number" && (!points.length || t > points[points.length - 1].x)) points.push({ x: t, y: s.value });
-          if (!rt.cursor || t > Date.parse(rt.cursor)) rt.cursor = s.ts;
-        }
-        while (points.length && points[0].x < now - RT_WINDOW_MS) points.shift();
-        rt.data.set(series.node_id, points);
-      }
-      const byId = new Map((tsdb.nodesByEquipment.get(equipmentId) || []).map((n) => [n.node_id, n]));
-      const chart = ensureChart("rt", "rt-chart");
-      chart.data.datasets = nodes.map((id, i) => ({
-        label: byId.get(id) ? nodeLabel(byId.get(id)) : id,
-        data: rt.data.get(id) || [],
-        borderColor: COLORS[i % COLORS.length],
-        backgroundColor: COLORS[i % COLORS.length],
-      }));
-      chart.options.scales.x.min = now - RT_WINDOW_MS;
-      chart.options.scales.x.max = now;
-      chart.update("none");
-    } catch {
-      // 오류 배너는 api() 가 보여 준다
-    } finally {
-      rt.busy = false;
-    }
-  }
-
-  // ---------------------------------------------------------------- 과거 데이터
 
   function historyRange() {
     const value = $("hist-range").value;
@@ -480,7 +428,7 @@
       return;
     }
     const elapsed = Math.round(performance.now() - started);
-    const chart = ensureChart("hist", "hist-chart");
+    const chart = ensureHistChart();
     const datasets = [];
     result.series.forEach((series, i) => {
       const color = COLORS[i % COLORS.length];
@@ -519,15 +467,123 @@
       : `다운샘플 ${result.bucket_seconds.toFixed(1)}초 구간 (평균 + 최소~최대) · 원본 ${total.toLocaleString("ko-KR")}행 · 조회 ${elapsed}ms`);
   }
 
-  // ---------------------------------------------------------------- DB 상태
+  // ---------------------------------------------------------------- DB 리소스 · 상태
+
+  function meterTone(ratio, { warn = 0.7, bad = 0.9, higherIsBetter = false } = {}) {
+    if (ratio == null) return "";
+    if (higherIsBetter) {
+      if (ratio < bad) return "bad";
+      if (ratio < warn) return "warn";
+      return "ok";
+    }
+    if (ratio >= bad) return "bad";
+    if (ratio >= warn) return "warn";
+    return "ok";
+  }
+
+  function renderMeter(label, ratio, text, opts) {
+    const pct = ratio == null ? 0 : Math.max(0, Math.min(100, ratio * 100));
+    const tone = meterTone(ratio, opts);
+    return el("div", { className: "tsdb-meter" },
+      el("span", { className: "label" }, label),
+      el("div", { className: "bar" }, el("div", { className: `fill ${tone}`, style: `width:${pct}%` })),
+      el("span", { className: "pct" }, text ?? fmtPct(ratio)));
+  }
+
+  function renderResources(s) {
+    const badge = $("db-resource-badge");
+    const res = s?.resources;
+    if (!s?.db_connected || !res) {
+      badge.textContent = s?.db_connected === false ? "연결 끊김" : "확인 중";
+      badge.className = `status-badge ${s?.db_connected === false ? "error" : ""}`;
+      $("db-resource-cards").replaceChildren();
+      $("db-resource-meters").replaceChildren();
+      $("db-activity-body").replaceChildren();
+      $("db-settings-body").replaceChildren();
+      return;
+    }
+    badge.textContent = "연결됨";
+    badge.className = "status-badge ok";
+
+    const conn = res.connections || {};
+    const cache = res.cache || {};
+    const act = res.activity || {};
+    const h = s.hypertable || {};
+    const st = s.storage || {};
+    const card = (k, v, sub, tone) =>
+      el("div", { className: `tsdb-card ${tone || ""}` }, el("span", { className: "k" }, k),
+        el("span", { className: "v" }, v), el("span", { className: "s" }, sub || " "));
+
+    $("db-resource-cards").replaceChildren(
+      card("접속", `${fmtNum(conn.client_total)} / ${fmtNum(conn.max_connections)}`,
+        `활성 ${fmtNum(conn.active)} · idle ${fmtNum(conn.idle)}`, meterTone(conn.usage_ratio)),
+      card("캐시 적중률", fmtPct(cache.hit_ratio),
+        `hit ${fmtNum(cache.blks_hit)} · read ${fmtNum(cache.blks_read)}`,
+        meterTone(cache.hit_ratio, { warn: 0.95, bad: 0.9, higherIsBetter: true })),
+      card("DB 크기", fmtBytes(h.database_bytes), `하이퍼테이블 ${fmtBytes(h.size_bytes)}`),
+      card("행 수 (근사)", fmtNum(h.approx_rows),
+        `chunk ${fmtNum(h.chunks)} · 압축 ${fmtNum(h.compressed_chunks)}`),
+      card("Deadlock", fmtNum(act.deadlocks), "통계 리셋 이후", act.deadlocks ? "bad" : "ok"),
+      card("임시 파일", fmtNum(act.temp_files), fmtBytes(act.temp_bytes), act.temp_files > 0 ? "warn" : "ok"),
+      card("Lock 대기", fmtNum(conn.waiting_locks),
+        `최장 쿼리 ${conn.longest_query_s == null ? "-" : `${conn.longest_query_s}s`}`,
+        conn.waiting_locks ? "bad" : "ok"),
+      card("백그라운드", fmtNum(conn.timescale_workers),
+        `TimescaleDB · autovacuum ${fmtNum(conn.autovacuum_workers)}`),
+      card("커밋", fmtNum(act.xact_commit),
+        `rollback ${fmtPct(act.rollback_ratio)} · ${fmtNum(act.xact_rollback)}`),
+      card("쓰기 튜플", fmtNum(act.tup_inserted),
+        `upd ${fmtNum(act.tup_updated)} · del ${fmtNum(act.tup_deleted)}`),
+    );
+
+    const compressRatio = st.compression?.chunks
+      ? st.compression.compressed_chunks / st.compression.chunks : null;
+    $("db-resource-meters").replaceChildren(
+      renderMeter("접속 사용률", conn.usage_ratio),
+      renderMeter("캐시 적중", cache.hit_ratio, fmtPct(cache.hit_ratio),
+        { warn: 0.95, bad: 0.9, higherIsBetter: true }),
+      renderMeter("압축 chunk", compressRatio,
+        st.compression ? `${fmtNum(st.compression.compressed_chunks)}/${fmtNum(st.compression.chunks)}` : "-",
+        { warn: 0.3, bad: 0.1, higherIsBetter: true }),
+    );
+
+    const states = conn.by_state || [];
+    $("db-activity-body").replaceChildren(
+      ...(states.length
+        ? states.map((r) => el("tr", {}, el("td", {}, r.label || "(없음)"), el("td", { className: "num" }, fmtNum(r.n))))
+        : [el("tr", {}, el("td", { colspan: "2", className: "muted" }, "세션 없음"))]),
+    );
+
+    const settingLabels = {
+      max_connections: "최대 접속",
+      shared_buffers: "shared_buffers",
+      effective_cache_size: "effective_cache_size",
+      work_mem: "work_mem",
+      maintenance_work_mem: "maintenance_work_mem",
+      max_worker_processes: "max_worker_processes",
+      max_parallel_workers: "max_parallel_workers",
+      "timescaledb.max_background_workers": "TSDB workers",
+      wal_level: "wal_level",
+      max_wal_size: "max_wal_size",
+      autovacuum: "autovacuum",
+      shared_preload_libraries: "preload",
+    };
+    const byName = Object.fromEntries((res.settings || []).map((row) => [row.name, row]));
+    $("db-settings-body").replaceChildren(
+      ...Object.entries(settingLabels).map(([name, label]) =>
+        el("tr", {}, el("th", {}, label), el("td", {}, fmtSetting(byName[name])))),
+    );
+  }
 
   async function refreshDbStatus() {
     let s;
     try {
       s = await api("/db-status");
     } catch {
+      renderResources(null);
       return;
     }
+    renderResources(s);
     const badge = $("db-badge");
     badge.textContent = s.db_connected ? "연결됨" : "연결 끊김";
     badge.className = `status-badge ${s.db_connected ? "ok" : "error"}`;
@@ -538,6 +594,7 @@
     const st = s.storage || {};
     const perf = s.ingest_performance || {};
     const al = s.alarm_engine || {};
+    const act = s.resources?.activity || {};
     const rows = s.db_connected ? [
       ["DB", `${s.database} · PostgreSQL ${s.postgresql_version}`],
       ["TimescaleDB 확장", `${s.timescaledb_version} (license: ${s.timescaledb_license})`],
@@ -548,6 +605,7 @@
         ["압축", st.compression ? `chunk ${st.compression.compressed_chunks}/${st.compression.chunks} 압축 · ${fmtBytes(st.compression.before_bytes)} → ${fmtBytes(st.compression.after_bytes)} (${st.compression.ratio}배)` : "-"],
         ["증가량", `최근 1시간 ${fmtNum(st.rows_last_1h)}행 (약 ${fmtBytes(st.growth_bytes_1h_estimate)}) · 최근 24시간 ${fmtNum(st.rows_last_24h)}행 · 이 속도면 하루 약 ${fmtBytes(st.growth_bytes_per_day_estimate)} (비압축, 행당 ${st.uncompressed_bytes_per_row} B)`],
       ] : []),
+      ["통계 누적", `커밋 ${fmtNum(act.xact_commit)} · rollback ${fmtNum(act.xact_rollback)} · deadlock ${fmtNum(act.deadlocks)} · temp ${fmtNum(act.temp_files)} (${fmtBytes(act.temp_bytes)})`],
       ["정책", (s.policies || []).map((p) => `${p.proc_name} (${p.every})`).join(", ") + " · 자동 삭제(보관 기간) 없음"],
       ["적재 성능", perf.recent_batches ? `배치 ${perf.recent_batches}개 · 저장 시간 p50 ${perf.batch_ms_p50}ms / p95 ${perf.batch_ms_p95}ms · ${perf.rows_per_s}행/s · DB 사용률 ${Math.round((perf.db_busy_ratio || 0) * 100)}%` : "-"],
       ["알람 판정", al.enabled ? `규칙 ${al.rules}개 · 판정 ${fmtNum(al.evaluations)}회 · 발생 ${al.opened} · 복구 ${al.cleared}${al.last_error ? ` · 오류 ${al.last_error.slice(0, 80)}` : ""}` : "꺼짐 (MFG_ALARMS_ENABLED)"],
@@ -562,36 +620,6 @@
       ["현장 기록 (REAL)", rec.enabled ? `노드 ${rec.mapped_nodes} · 저장 ${fmtNum(rec.inserted)} · 대기 ${rec.pending} · 실제 간격 중앙값 ${rec.interval_median_ms ?? "-"} ms` : "꺼짐 (MFG_RECORD_OPCUA)"],
     ] : [["오류", s.error || "-"]];
     $("db-status").replaceChildren(...rows.map(([k, v]) => el("tr", {}, el("th", {}, k), el("td", {}, v))));
-  }
-
-  // ---------------------------------------------------------------- 알람
-
-  async function refreshAlarms() {
-    let result;
-    try {
-      result = await api(`/alarms?status=${$("alarm-filter").value}&limit=100`);
-    } catch {
-      return;
-    }
-    const active = Object.values(result.active).reduce((a, b) => a + b, 0);
-    const badge = $("alarm-badge");
-    badge.textContent = active ? `진행 중 ${active}건` : "진행 중 알람 없음";
-    badge.className = `status-badge ${active ? "error" : "ok"}`;
-    const rows = result.alarms.map((a) => {
-      const open = a.status !== "CLEARED";
-      const duration = a.ended_at ? ` (${((Date.parse(a.ended_at) - Date.parse(a.started_at)) / 1000).toFixed(1)}초)` : "";
-      return el("tr", { className: open ? "alarm-active" : "" },
-        el("td", {}, open ? el("b", {}, "진행 중") : "복구"),
-        el("td", {}, el("span", { className: `sev-tag ${a.severity}` }, a.severity)),
-        el("td", {}, a.alarm_type),
-        el("td", {}, sourceBadge(a.data_source), " ", a.equipment_id),
-        el("td", { title: a.node_id || "" }, a.node_name || "(설비 전체)"),
-        el("td", { className: "wrap" }, a.message),
-        el("td", { className: "num" }, fmtTime(a.started_at)),
-        el("td", { className: "num" }, a.ended_at ? `${fmtTime(a.ended_at)}${duration}` : "-"));
-    });
-    $("alarm-body").replaceChildren(...(rows.length ? rows
-      : [el("tr", {}, el("td", { colspan: "8", className: "muted" }, "기록된 알람이 없습니다."))]));
   }
 
   // ---------------------------------------------------------------- 노드 상태
@@ -624,21 +652,15 @@
 
   $("tab-aasx").addEventListener("click", () => setTab("aasx"));
   $("tab-tsdb").addEventListener("click", () => setTab("tsdb"));
+  $("tab-mcap")?.addEventListener("click", () => setTab("mcap"));
   $("stream-equipment").addEventListener("change", () => { refreshStreamNodes(); openStream(); });
   $("stream-node").addEventListener("change", openStream);
   $("stream-limit").addEventListener("change", openStream);
   $("stream-source").addEventListener("change", openStream);
-  $("alarm-filter").addEventListener("change", refreshAlarms);
   $("node-equipment").addEventListener("change", refreshNodes);
   $("stream-pause").addEventListener("click", () => {
     tsdb.streamPaused = !tsdb.streamPaused;
     $("stream-pause").textContent = tsdb.streamPaused ? "재개" : "일시정지";
-  });
-  $("rt-equipment").addEventListener("change", () => { renderNodePicker("rt"); resetRealtime(); });
-  $("rt-pause").addEventListener("click", () => {
-    tsdb.rt.paused = !tsdb.rt.paused;
-    $("rt-pause").textContent = tsdb.rt.paused ? "재개" : "일시정지";
-    if (!tsdb.rt.paused) resetRealtime();
   });
   $("hist-equipment").addEventListener("change", () => renderNodePicker("hist"));
   $("hist-range").addEventListener("change", () => { $("hist-custom").hidden = $("hist-range").value !== "custom"; });
@@ -650,4 +672,5 @@
 
   window.TsdbMonitor = { setTab };
   if (location.hash === "#tsdb") setTab("tsdb");
+  else if (location.hash === "#mcap") setTab("mcap");
 })();
