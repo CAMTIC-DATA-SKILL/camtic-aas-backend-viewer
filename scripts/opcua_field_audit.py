@@ -6,7 +6,7 @@
 확인 항목
 - 노드별: 존재 여부(NodeClass/BrowseName), 서버 DataType, MinimumSamplingInterval, AccessLevel, 현재 값·StatusCode·시각
 - 없는 노드: 같은 BrowseName 을 주소 공간에서 찾아 NodeId 불일치인지, 서버에 아예 없는지 구분
-- 구독 A (앱과 같음: publishing 500ms, sampling 100ms, queue 0) / 구독 B (publishing 100ms, sampling 50ms, queue 10):
+- 구독 A (앱과 같음: publishing 100ms, sampling 100ms, queue 0) / 구독 B (publishing 100ms, sampling 50ms, queue 10):
   서버가 승인한 값(Revised Publishing / Sampling / Queue)과 SourceTimestamp · ServerTimestamp · 수신 시각 ·
   값 변경 간격을 따로 잰다. B 에서도 SourceTimestamp 간격이 같으면 갱신 주기는 클라이언트 설정이 아니라
   서버 앞단(서버의 데이터 갱신 또는 그 이전 단계)에서 정해진 것이다.
@@ -185,7 +185,7 @@ async def main(seconds: float) -> dict[str, Any]:
         missing = {entry["aas_path"].split("/")[-1].split(".")[-1] for entry in report["nodes"] if not entry["exists"]}
         report["browse_search"] = await find_by_browse_name(client, missing) if missing else {}
         existing = [entry["node_id"] for entry in report["nodes"] if entry["exists"]]
-        report["subscription_app_like"] = await subscription_test(client, existing, 500, 100, 0, seconds)
+        report["subscription_app_like"] = await subscription_test(client, existing, 100, 100, 0, seconds)
         report["subscription_fast"] = await subscription_test(client, existing, 100, 50, 10, seconds)
     finally:
         await client.disconnect()

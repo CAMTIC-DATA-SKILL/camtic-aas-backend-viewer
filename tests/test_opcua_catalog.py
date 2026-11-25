@@ -25,7 +25,7 @@ def _cfg(**updates) -> OpcUaConfig:
         client_cert=None,
         client_key=None,
         server_cert=None,
-        subscription_period_ms=500,
+        subscription_period_ms=100,
         sampling_interval_ms=100,
         node_ids=(),
     )

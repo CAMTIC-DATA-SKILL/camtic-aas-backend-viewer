@@ -69,6 +69,39 @@ def _specific_asset_ids(ids: Iterable[model.SpecificAssetId]) -> list[dict[str, 
     return [{"name": s.name, "value": s.value} for s in ids]
 
 
+def _element_children(element: model.SubmodelElement) -> list[model.SubmodelElement]:
+    if isinstance(element, (model.SubmodelElementCollection, model.SubmodelElementList)):
+        return list(element.value)
+    if isinstance(element, model.Entity):
+        return list(element.statement)
+    if isinstance(element, model.AnnotatedRelationshipElement):
+        return list(element.annotation)
+    if isinstance(element, model.Operation):
+        children: list[model.SubmodelElement] = []
+        for variables in (
+            element.input_variable,
+            element.output_variable,
+            element.in_output_variable,
+        ):
+            children.extend(variables)
+        return children
+    return []
+
+
+def _count_properties(package: AasxPackage) -> int:
+    """패키지 전체 Submodel 트리의 Property 개수."""
+    total = 0
+    stack: list[model.SubmodelElement] = []
+    for submodel in package.submodels:
+        stack.extend(submodel.submodel_element)
+    while stack:
+        element = stack.pop()
+        if isinstance(element, model.Property):
+            total += 1
+        stack.extend(_element_children(element))
+    return total
+
+
 def package_summary(
     package: AasxPackage, *, artifact_count: Optional[int] = None
 ) -> dict[str, Any]:
@@ -84,6 +117,7 @@ def package_summary(
             "counts": {
                 "shells": len(package.shells),
                 "submodels": len(package.submodels),
+                "properties": _count_properties(package),
                 "conceptDescriptions": len(package.concept_descriptions),
                 "files": len(package.files),
             },

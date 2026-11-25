@@ -90,7 +90,7 @@ OS 환경 변수가 이미 설정되어 있으면 `.env` 값보다 우선합니�
 | `OPCUA_USERNAME` / `OPCUA_PASSWORD` | 인증 (비우면 Anonymous) | (없음) |
 | `OPCUA_SECURITY_POLICY` | `None` 또는 보안 정책 | `None` |
 | `OPCUA_CONNECT_MAX_RETRIES` | 최초 접속 재시도 횟수 (`0` = 무제한) | `3` |
-| `OPCUA_SUBSCRIPTION_PERIOD_MS` | 구독 publishing 주기 | `500` |
+| `OPCUA_SUBSCRIPTION_PERIOD_MS` | 구독 publishing 주기 | `100` |
 | `MQTT_ENABLED` | true 이면 live·DB 기록은 MQTT, 시작 시 OPC-UA 상시 구독 없음 | `false` |
 | `MQTT_HOST` / `MQTT_PORT` | 브로커 주소 | `127.0.0.1` / `1883` |
 | `MQTT_TOPIC_PREFIX` | AasPath 앞에 붙는 토픽 | `aas` |

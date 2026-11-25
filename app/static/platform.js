@@ -140,7 +140,7 @@ async function loadPackages(reload = false) {
       : await fetchJson("/api/packages");
   } catch (e) {
     $("package-tbody").replaceChildren(
-      el("tr", {}, el("td", { colspan: "9", className: "error-text" }, `불러오기 실패: ${e.message}`)),
+      el("tr", {}, el("td", { colspan: "10", className: "error-text" }, `불러오기 실패: ${e.message}`)),
     );
     $("package-count").textContent = "오류";
     return;
@@ -161,7 +161,7 @@ function renderTable() {
         {},
         el(
           "td",
-          { colspan: "9", className: "muted" },
+          { colspan: "10", className: "muted" },
           "등록된 AASX 패키지가 없습니다. 'AAS 데이터 업로드'로 추가하세요.",
         ),
       ),
@@ -214,6 +214,7 @@ function renderTable() {
       el("td", { className: "col-aas-id" }, renderShellIds(pkg.shells)),
       el("td", {}, String(pkg.counts?.shells ?? 0)),
       el("td", {}, String(pkg.counts?.submodels ?? 0)),
+      el("td", {}, String(pkg.counts?.properties ?? 0)),
       el("td", {}, String(pkg.counts?.conceptDescriptions ?? 0)),
       el("td", {}, artifacts),
       el("td", {}, status, pkg.error ? el("div", { className: "error-text small" }, pkg.error) : null),
