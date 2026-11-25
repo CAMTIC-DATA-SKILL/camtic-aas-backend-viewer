@@ -1,0 +1,8 @@
+[Unit]
+Description=CAMTIC AAS
+Documentation=file://@ROOT@/README.md
+Wants=camtic-aas-backend-viewer.service camtic-aas-publisher.service
+After=camtic-aas-backend-viewer.service camtic-aas-publisher.service
+
+[Install]
+WantedBy=multi-user.target

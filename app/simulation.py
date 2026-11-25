@@ -24,6 +24,8 @@ from utils.log_setup import LogSetup
 logger = LogSetup.get_logger(__name__)
 
 _KINEMATIC_SHORTS = {"robotkinematicstate", "robotkinematics"}
+_HH7_V03_SHELL_ID = "urn:physical-ai:aas:hyundai:hh7:template:v0.3"
+_CAMERA_STREAM = "/api/camera/d455/stream.mjpg"
 _SKIP_COLLECTION = re.compile(
     r"speed|velocity|accel|torque|target|command|desired|setpoint|offset|limit|force",
     re.I,
@@ -228,6 +230,15 @@ def _suggested_joints() -> list[dict[str, Any]]:
     ]
 
 
+def camera_stream_for_package(package: AasxPackage) -> Optional[str]:
+    """D455 라이브는 HH7 AAS v0.3 셸에만 연결한다."""
+    if package.error:
+        return None
+    if any(str(shell.id) == _HH7_V03_SHELL_ID for shell in package.shells):
+        return _CAMERA_STREAM
+    return None
+
+
 def _urdf_from_package(package: AasxPackage) -> Optional[tuple[str, bytes]]:
     extras = read_extra_files(package, {".urdf"})
     return extras[0] if extras else None
@@ -298,4 +309,5 @@ def build_simulation_payload(
         "warnings": warnings,
         "error": mesh.get("error"),
         "documentationSubmodels": [sm.id_short for sm in find_documentation_submodels(package)],
+        "cameraStream": camera_stream_for_package(package),
     }

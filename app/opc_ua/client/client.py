@@ -73,6 +73,15 @@ class OpcUaClient:
     def is_connected(self) -> bool:
         return self._client is not None
 
+    @property
+    def is_transport_connected(self) -> bool:
+        """세션 객체가 아니라 소켓이 CONNECTED 인지. 재연결 중이면 False."""
+        raw = self._client
+        if raw is None:
+            return False
+        state = getattr(getattr(raw, "uaclient", None), "state", None)
+        return getattr(state, "value", None) == "connected"
+
     async def _build_client(self) -> Client:
         cfg = self._cfg
         client = Client(
@@ -250,7 +259,9 @@ class OpcUaClient:
         callback: DataChangeCallback,
         period_ms: int | None = None,
         sampling_interval_ms: int | None = None,
-    ) -> Subscription:
+        *,
+        quiet: bool = False,
+    ) -> tuple[Subscription, list[str]]:
         ids = list(node_ids)
         if not ids:
             raise ValueError("구독할 노드 ID 가 없습니다.")
@@ -273,22 +284,24 @@ class OpcUaClient:
             sampling_interval=sampling,
         )
 
-        failed = 0
+        failed_ids: list[str] = []
         for node_id, result in zip(ids, results):
             if isinstance(result, ua.StatusCode):
-                failed += 1
+                failed_ids.append(node_id)
+                if quiet:
+                    continue
                 log = logger.warning if result.name == "BadNodeIdUnknown" else logger.error
                 log("노드 구독 실패: %s (%s)", node_id, result.name)
 
         self._subscriptions.append(subscription)
         logger.info(
             "구독 생성: %d/%d개 노드 (period=%dms, sampling=%dms)",
-            len(ids) - failed,
+            len(ids) - len(failed_ids),
             len(ids),
             period,
             sampling,
         )
-        return subscription
+        return subscription, failed_ids
 
     async def unsubscribe_all(self) -> None:
         while self._subscriptions:

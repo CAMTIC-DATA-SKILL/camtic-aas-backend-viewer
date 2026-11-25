@@ -2,6 +2,7 @@
 Description=CAMTIC AAS Backend Viewer
 Documentation=file://@ROOT@/README.md
 After=network.target
+PartOf=camtic-aas.target
 
 [Service]
 Type=simple
@@ -17,4 +18,4 @@ RestartSec=5
 TimeoutStopSec=20
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=camtic-aas.target

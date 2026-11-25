@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CAMTIC AAS Viewer</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=37">
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -23,6 +23,7 @@
   <nav class="view-tabs" role="tablist" aria-label="화면 선택">
     <button type="button" role="tab" id="tab-aasx" aria-selected="true" aria-controls="layout">AASX Viewer</button>
     <button type="button" role="tab" id="tab-tsdb" aria-selected="false" aria-controls="tsdb-view">TimescaleDB 모니터링</button>
+    <button type="button" role="tab" id="tab-mcap" aria-selected="false" aria-controls="mcap-view">MCAP Viewer</button>
   </nav>
 
   <div class="layout" id="layout">
@@ -57,13 +58,13 @@
         <h2>상세 정보</h2>
       </div>
       <div id="detail" class="detail"><p class="muted">트리에서 항목을 선택하세요.</p></div>
-      <section class="sim-host" id="sim-host">
+      <section class="sim-host is-sim-unavailable is-collapsed" id="sim-host">
         <div class="sim-toolbar">
-          <span id="sim-mode" class="sim-badge">STOP</span>
-          <button type="button" id="sim-live">LIVE</button>
-          <button type="button" id="sim-demo">DEMO</button>
-          <button type="button" id="sim-stop">STOP</button>
-          <button type="button" id="sim-fit">맞춤</button>
+          <span id="sim-mode" class="sim-badge">LIVE</span>
+          <div class="sim-tabs" role="tablist" aria-label="렌더 보기">
+            <button type="button" role="tab" id="sim-tab-sim" aria-selected="false" aria-controls="sim-viewport">Simulation</button>
+            <button type="button" role="tab" id="sim-tab-ego" aria-selected="false" aria-controls="ego-viewport">Egocentric View</button>
+          </div>
         </div>
         <div class="sim-stage" id="sim-stage">
           <div class="sim-viewport" id="sim-viewport">
@@ -80,8 +81,33 @@
               <span>왼쪽 드래그: 회전 / 휠: 확대 / 오른쪽: 이동</span>
               <span>연두 선: 모델 TCP 궤적 · 주황 축: 수신 TCP</span>
             </div>
+            <div class="ego-offline" id="sim-offline" hidden>
+              <p>사용 가능한 DT 에셋이 없어 시뮬레이션을 사용할 수 없습니다.</p>
+            </div>
           </div>
-          <p class="sim-stage-note" id="sim-stage-note" hidden>확대 창에서 시뮬레이션을 보고 있습니다.</p>
+          <div class="ego-viewport" id="ego-viewport" data-mode="both" hidden>
+            <div class="ego-modes" id="ego-modes" role="tablist" aria-label="카메라 뷰 모드">
+              <button type="button" role="tab" data-ego-mode="both" aria-selected="true">RGB+Depth</button>
+              <button type="button" role="tab" data-ego-mode="rgb" aria-selected="false">RGB</button>
+              <button type="button" role="tab" data-ego-mode="depth" aria-selected="false">Depth</button>
+            </div>
+            <div class="ego-frame" id="ego-frame">
+              <img id="ego-stream" alt="장비 카메라 RGB+Depth 스트림">
+            </div>
+            <p class="ego-status" id="ego-status">카메라 스트림을 연결하는 중</p>
+            <div class="ego-offline" id="ego-offline" hidden>
+              <p>연결된 스트리밍 LIVE가 없습니다.</p>
+            </div>
+            <button type="button" id="ego-focus" class="sim-focus-btn" aria-pressed="false" aria-label="카메라 확대" title="확대">
+              <svg class="sim-icon-expand" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg class="sim-icon-shrink" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <p class="sim-stage-note" id="sim-stage-note" hidden>확대 창에서 보고 있습니다.</p>
         </div>
         <div id="sim-drawer-home">
         <details class="sim-drawer" id="sim-drawer">
@@ -259,18 +285,163 @@
     </div>
   </section>
 
+  <section class="tsdb-view mcap-view" id="mcap-view" hidden>
+    <div id="mcap-banner" class="tsdb-banner"></div>
+    <p id="mcap-error" class="tsdb-banner error" hidden></p>
+    <div class="mcap-layout">
+      <aside class="panel tsdb-panel mcap-files-panel">
+        <div class="tsdb-head">
+          <h2>아카이브 <span class="muted" id="mcap-archive-meta"></span></h2>
+          <button type="button" id="mcap-refresh-files">새로고침</button>
+        </div>
+        <input id="mcap-file-filter" type="search" placeholder="파일 이름 검색">
+        <div class="mcap-file-list" id="mcap-file-list">
+          <p class="muted">불러오는 중...</p>
+        </div>
+      </aside>
+      <div class="mcap-main">
+        <div class="tsdb-cards" id="mcap-cards"></div>
+        <div class="mcap-subtabs" role="tablist" aria-label="MCAP 상세">
+          <button type="button" role="tab" data-mcap-panel="overview" aria-selected="true">개요·스키마</button>
+          <button type="button" role="tab" data-mcap-panel="channels" aria-selected="false">채널</button>
+          <button type="button" role="tab" data-mcap-panel="chunks" aria-selected="false">청크</button>
+          <button type="button" role="tab" data-mcap-panel="messages" aria-selected="false">부분 읽기</button>
+          <button type="button" role="tab" data-mcap-panel="plot" aria-selected="false">그래프</button>
+        </div>
+
+        <section class="panel tsdb-panel mcap-panel" data-mcap-panel-body="overview">
+          <div class="tsdb-head"><h2>파일 구조</h2><span class="muted" id="mcap-overview-meta"></span></div>
+          <table class="tsdb-kv" id="mcap-overview-kv"></table>
+          <h3 class="mcap-section-title">Metadata</h3>
+          <pre class="mcap-code" id="mcap-metadata">파일을 선택하세요.</pre>
+          <h3 class="mcap-section-title">Schemas</h3>
+          <div id="mcap-schemas" class="mcap-schema-list"><p class="muted">파일을 선택하세요.</p></div>
+        </section>
+
+        <section class="panel tsdb-panel mcap-panel" data-mcap-panel-body="channels" hidden>
+          <div class="tsdb-head"><h2>채널 · 인코딩</h2><span class="muted" id="mcap-channel-meta"></span></div>
+          <div class="tsdb-table-wrap">
+            <table class="tsdb-table">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Topic</th><th>message_encoding</th><th>schema</th>
+                  <th>schema_encoding</th><th>단위</th><th>메시지</th><th>선택</th>
+                </tr>
+              </thead>
+              <tbody id="mcap-channel-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel tsdb-panel mcap-panel" data-mcap-panel-body="chunks" hidden>
+          <div class="tsdb-head">
+            <h2>청크 인덱스</h2>
+            <button type="button" class="btn-primary" id="mcap-chunks-run">청크 조회</button>
+          </div>
+          <div class="tsdb-controls">
+            <label>기간
+              <select id="mcap-chunks-range">
+                <option value="60">최근 1분</option>
+                <option value="300" selected>최근 5분</option>
+                <option value="3600">최근 1시간</option>
+                <option value="86400">최근 24시간</option>
+              </select>
+            </label>
+            <label>표시 <select id="mcap-chunks-limit"><option>20</option><option selected>50</option><option>100</option></select></label>
+            <span class="muted" id="mcap-chunks-meta"></span>
+          </div>
+          <p class="mcap-hint">선택한 채널이 들어 있는 청크만 고릅니다. 비어 있으면 시간 구간의 모든 청크입니다.</p>
+          <div class="tsdb-table-wrap">
+            <table class="tsdb-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>압축</th><th>압축 크기</th><th>원본 크기</th><th>비율</th>
+                  <th>시작</th><th>끝</th><th>채널 수</th><th>토픽</th>
+                </tr>
+              </thead>
+              <tbody id="mcap-chunks-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel tsdb-panel mcap-panel" data-mcap-panel-body="messages" hidden>
+          <div class="tsdb-head">
+            <h2>토픽 부분 읽기</h2>
+            <button type="button" class="btn-primary" id="mcap-messages-run">메시지 읽기</button>
+          </div>
+          <div class="tsdb-controls">
+            <label>기간
+              <select id="mcap-messages-range">
+                <option value="5">최근 5초</option>
+                <option value="30" selected>최근 30초</option>
+                <option value="60">최근 1분</option>
+                <option value="300">최근 5분</option>
+              </select>
+            </label>
+            <label>건수 <select id="mcap-messages-limit"><option>20</option><option selected>50</option><option>100</option><option>200</option></select></label>
+            <span class="muted" id="mcap-messages-meta"></span>
+          </div>
+          <p class="mcap-hint">채널 탭에서 고른 topic 만 <code>iter_messages(topics=…)</code> 로 읽습니다. 전체 파일을 순회하지 않습니다.</p>
+          <div class="tsdb-table-wrap">
+            <table class="tsdb-table">
+              <thead>
+                <tr>
+                  <th>log_time</th><th>topic</th><th>encoding</th><th>schema</th><th>bytes</th><th>payload</th>
+                </tr>
+              </thead>
+              <tbody id="mcap-messages-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel tsdb-panel mcap-panel" data-mcap-panel-body="plot" hidden>
+          <div class="tsdb-head">
+            <h2>시계열 그래프 <span class="muted" id="mcap-meta"></span></h2>
+            <button type="button" class="btn-primary" id="mcap-run">조회</button>
+          </div>
+          <div class="tsdb-controls">
+            <label>기간
+              <select id="mcap-range">
+                <option value="60">최근 1분</option>
+                <option value="300" selected>최근 5분</option>
+                <option value="1800">최근 30분</option>
+                <option value="3600">최근 1시간</option>
+                <option value="86400">최근 24시간</option>
+                <option value="custom">사용자 지정</option>
+              </select>
+            </label>
+            <span id="mcap-custom" hidden>
+              <input type="datetime-local" id="mcap-start" step="1"> ~
+              <input type="datetime-local" id="mcap-end" step="1">
+            </span>
+            <label>점 수
+              <select id="mcap-points">
+                <option>400</option>
+                <option selected>800</option>
+                <option>1600</option>
+                <option>3200</option>
+              </select>
+            </label>
+          </div>
+          <div class="tsdb-nodepick" id="mcap-channels"></div>
+          <div class="chart-box tsdb-chart"><canvas id="mcap-chart"></canvas></div>
+          <table class="tsdb-table tsdb-stats">
+            <thead><tr><th>채널</th><th>단위</th><th>읽은 메시지</th><th>표시 점</th><th>최솟값</th><th>최댓값</th></tr></thead>
+            <tbody id="mcap-stats"></tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+  </section>
+
   <dialog id="sim-focus-dialog" class="sim-focus-dialog" aria-label="장비 렌더 시뮬레이션">
     <div class="sim-focus-panel" id="sim-focus-panel">
     <header>
       <div class="live-title">
         <h2>장비 렌더 시뮬레이션</h2>
-        <span id="sim-focus-mode" class="sim-badge">STOP</span>
+        <span id="sim-focus-mode" class="sim-badge">LIVE</span>
       </div>
       <div class="sim-focus-actions">
-        <button type="button" id="sim-focus-live">LIVE</button>
-        <button type="button" id="sim-focus-demo">DEMO</button>
-        <button type="button" id="sim-focus-stop">STOP</button>
-        <button type="button" id="sim-focus-fit">맞춤</button>
         <button type="button" id="sim-focus-close" class="sim-close-btn" aria-label="닫기" title="닫기">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -348,6 +519,22 @@
     </div>
   </dialog>
 
+  <dialog id="ego-focus-dialog" class="sim-focus-dialog" aria-label="Egocentric View">
+    <div class="sim-focus-panel ego-focus-panel">
+      <header>
+        <h2>Egocentric View</h2>
+        <div class="sim-focus-actions">
+          <button type="button" id="ego-focus-close" class="sim-close-btn" aria-label="닫기" title="닫기">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div class="ego-focus-stage" id="ego-focus-stage"></div>
+    </div>
+  </dialog>
+
   <dialog id="live-json-dialog" class="live-json-dialog">
     <header>
       <div class="live-title">
@@ -366,8 +553,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <script src="documentation.js?v=4"></script>
   <script src="live.js?v=8"></script>
-  <script src="app.js?v=15"></script>
-  <script type="module" src="sim.js?v=14"></script>
-  <script src="tsdb-monitor.js?v=9"></script>
+  <script src="app.js?v=16"></script>
+  <script type="module" src="sim.js?v=25"></script>
+  <script src="tsdb-monitor.js?v=10"></script>
+  <script src="mcap-viewer.js?v=5"></script>
 </body>
 </html>

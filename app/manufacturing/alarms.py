@@ -4,7 +4,8 @@
 - STALE     : 노드 단위 수신 중단 — 설비는 수신 중인데 그 노드만 끊김
 - BAD_QUALITY / UNCERTAIN_QUALITY : 마지막 판정 이후 구간에 해당 품질이 있었거나 최신값이 그 품질
 - THRESHOLD : data/manufacturing/alarm_rules.json 범위를 벗어난 값이 구간에 있었음
-끊김 판정: 마지막 수신 후 max(5초, sampling_ms × 50) 이 지남. 한 번도 수신하지 않은 노드(현장 미지원 등)는 알람을 만들지 않는다.
+끊김 판정: 마지막 수신 후 stale_timeout(sampling_ms) = max(5초, sampling_ms × 50) 이 지남.
+한 번도 수신하지 않은 노드(현장 미지원 등)는 알람을 만들지 않는다.
 중복 방지: 같은 (설비, 노드, 유형)의 열린 알람은 하나뿐이다 (alarm_event_open_uniq 부분 고유 인덱스).
 """
 
@@ -24,14 +25,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import BASE_DIR
 from utils.log_setup import LogSetup
 
-from .queries import STALE_FACTOR
+from .queries import stale_timeout
 from .values import quality_class
 
 logger = LogSetup.get_logger(__name__)
 
 RULES_FILE = BASE_DIR / "data" / "manufacturing" / "alarm_rules.json"
 INTERVAL = 2.0
-MIN_STALE = timedelta(seconds=5)
 
 
 @dataclass(frozen=True)
@@ -151,7 +151,7 @@ class AlarmEngine:
 
         for equipment_id, rows in by_equipment.items():
             seen = [r for r in rows if r.received_at is not None]
-            stale = [r for r in seen if now - r.received_at > max(MIN_STALE, timedelta(milliseconds=r.sampling_ms * STALE_FACTOR))]
+            stale = [r for r in seen if now - r.received_at > stale_timeout(r.sampling_ms)]
             comm_loss = bool(seen) and len(stale) == len(seen)
             if comm_loss:
                 last = max(r.received_at for r in seen)

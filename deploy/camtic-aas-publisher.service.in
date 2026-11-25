@@ -1,0 +1,21 @@
+[Unit]
+Description=CAMTIC AAS OPC-UA to MQTT publisher
+Documentation=file://@ROOT@/README.md
+After=network.target mosquitto.service
+PartOf=camtic-aas.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@GROUP@
+WorkingDirectory=@ROOT@
+Environment=VIRTUAL_ENV=@ROOT@/.venv
+Environment=PATH=@ROOT@/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@ROOT@/.venv/bin/python -m publisher
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=camtic-aas.target

@@ -27,8 +27,7 @@ const state = {
   selectedRow: null,
   selectedNode: null,
   filter: "",
-  liveTimer: null,
-  liveGen: 0,
+  liveSource: null,
   statusUntil: 0,
 };
 
@@ -514,10 +513,9 @@ function setLiveStatus(message, isError = false) {
 }
 
 function stopLiveRefresh() {
-  state.liveGen += 1;
-  if (state.liveTimer) {
-    clearTimeout(state.liveTimer);
-    state.liveTimer = null;
+  if (state.liveSource) {
+    state.liveSource.close();
+    state.liveSource = null;
   }
 }
 
@@ -542,31 +540,60 @@ async function pullLiveFrame() {
 }
 
 function startLiveRefresh() {
-  const gen = (state.liveGen += 1);
-  if (state.liveTimer) {
-    clearTimeout(state.liveTimer);
-    state.liveTimer = null;
+  if (!state.packageId || !state.tree) {
+    stopLiveRefresh();
+    return;
   }
-  const tick = async () => {
-    if (state.liveGen !== gen || !state.packageId || !state.tree) return;
+  const path = `/api/opcua/packages/${encodeURIComponent(state.packageId)}/live/stream`;
+  if (state.liveSource && state.liveSource.readyState !== EventSource.CLOSED) {
+    if (new URL(state.liveSource.url).pathname === path) return;
+  }
+  stopLiveRefresh();
+  const source = new EventSource(path);
+  state.liveSource = source;
+  source.onmessage = (event) => {
+    if (state.liveSource !== source) return;
     try {
-      applyLiveFrame(await pullLiveFrame());
+      applyLiveFrame(JSON.parse(event.data));
     } catch (e) {
-      if (state.liveGen !== gen) return;
       setLiveStatus(e.message, true);
     }
-    if (state.liveGen !== gen) return;
-    state.liveTimer = setTimeout(tick, 500);
   };
-  tick();
+  source.onerror = () => {
+    if (state.liveSource !== source || source.readyState !== EventSource.CLOSED) return;
+    setLiveStatus("실시간 연결이 끊겼습니다.", true);
+  };
 }
 
-async function tryLoadLiveValues({ silent = false } = {}) {
+async function tryLoadLiveValues({ silent = false, reconnect = false } = {}) {
   if (!state.packageId || !state.tree) return;
   if (!silent) setLiveStatus("현장 값을 읽는 중...");
   try {
     const status = await fetchJson("/api/opcua/status");
-    if (!status.connected) {
+    if (status.liveSource === "mqtt") {
+      const frame = await pullLiveFrame();
+      applyLiveFrame(frame);
+      startLiveRefresh();
+      if (
+        !status.mqttConnected &&
+        frame.subscribeMatch !== false &&
+        !(frame.values || []).length &&
+        !silent
+      ) {
+        setLiveStatus("MQTT 브로커 연결을 기다리는 중...");
+      }
+      return;
+    }
+    if (reconnect) {
+      if (!silent) setLiveStatus("OPC-UA 연결을 확인하는 중...");
+      const reconnected = await fetchJson("/api/opcua/reconnect", { method: "POST" });
+      if (!reconnected.connected) {
+        stopLiveRefresh();
+        setLiveStatus("OPC-UA 재연결에 실패했습니다.", true);
+        return;
+      }
+      if (!silent) setLiveStatus("현장 값을 읽는 중...");
+    } else if (!status.connected) {
       stopLiveRefresh();
       setLiveStatus(silent ? "" : "OPC-UA에 먼저 접속하세요. 유틸리티 → OPC-UA", !silent);
       return;
@@ -720,7 +747,7 @@ function openDocumentationUpload() {
 $("reload-btn").addEventListener("click", () => loadPackages(true));
 $("expand-btn").addEventListener("click", () => setAllCollapsed(false));
 $("collapse-btn").addEventListener("click", () => setAllCollapsed(true));
-$("live-btn").addEventListener("click", () => tryLoadLiveValues());
+$("live-btn").addEventListener("click", () => tryLoadLiveValues({ reconnect: true }));
 $("live-view-btn").addEventListener("click", () => setLiveView(!window.LiveDashboard?.isVisible()));
 $("live-json-btn").addEventListener("click", () => setLiveJsonView(!window.LiveDashboard?.isJsonVisible()));
 $("download-format").addEventListener("change", updateDownloadControls);

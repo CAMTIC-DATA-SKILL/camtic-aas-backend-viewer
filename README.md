@@ -33,7 +33,7 @@ python -m app
 
 ## Linux 서비스 (재부팅 자동 기동)
 
-시스템 systemd 유닛으로 등록하면 `systemctl`로 상태를 보고, 부팅 후에도 서버가 올라갑니다. 프로세스는 설치한 사용자 권한으로 실행됩니다.
+화면(`python -m app`)과 발행(`python -m publisher`)은 서비스 둘로 등록하고, `camtic-aas.target` 이 둘을 같이 켭니다. 프로세스는 설치한 사용자 권한으로 실행됩니다. 타깃을 멈추거나 재시작하면 둘 다 따라갑니다. 화면 서비스만 재시작하면 발행의 OPC-UA 구독은 유지되고, 발행만 재시작하면 화면은 브로커에 남은 마지막 값을 계속 보여 줍니다.
 
 ```bash
 chmod +x scripts/install-service.sh scripts/uninstall-service.sh
@@ -44,13 +44,17 @@ chmod +x scripts/install-service.sh scripts/uninstall-service.sh
 
 | 작업 | 명령 |
 | --- | --- |
-| 상태 | `systemctl status camtic-aas-backend-viewer` |
-| 로그 | `journalctl -u camtic-aas-backend-viewer -f` |
-| 재시작 | `sudo systemctl restart camtic-aas-backend-viewer` |
-| 중지 | `sudo systemctl stop camtic-aas-backend-viewer` |
+| 같이 기동 | `sudo systemctl start camtic-aas.target` |
+| 같이 중지 | `sudo systemctl stop camtic-aas.target` |
+| 같이 재시작 | `sudo systemctl restart camtic-aas.target` |
+| 상태 | `systemctl status camtic-aas.target` |
+| 화면만 재시작 | `sudo systemctl restart camtic-aas-backend-viewer` |
+| 발행만 재시작 | `sudo systemctl restart camtic-aas-publisher` |
+| 화면 로그 | `journalctl -u camtic-aas-backend-viewer -f` |
+| 발행 로그 | `journalctl -u camtic-aas-publisher -f` |
 | 해제 | `./scripts/uninstall-service.sh` |
 
-호스트/포트는 `.env` 의 `SERVER_HOST` / `SERVER_PORT` 를 따릅니다.
+호스트/포트는 `.env` 의 `SERVER_HOST` / `SERVER_PORT` 를 따릅니다. 개발 중 포그라운드로 띄울 때는 서비스 대신 `python -m app` 와 `python -m publisher` 를 각각 실행합니다.
 
 ## 설정 (.env)
 
@@ -87,6 +91,9 @@ OS 환경 변수가 이미 설정되어 있으면 `.env` 값보다 우선합니�
 | `OPCUA_SECURITY_POLICY` | `None` 또는 보안 정책 | `None` |
 | `OPCUA_CONNECT_MAX_RETRIES` | 최초 접속 재시도 횟수 (`0` = 무제한) | `3` |
 | `OPCUA_SUBSCRIPTION_PERIOD_MS` | 구독 publishing 주기 | `500` |
+| `MQTT_ENABLED` | true 이면 live·DB 기록은 MQTT, 시작 시 OPC-UA 상시 구독 없음 | `false` |
+| `MQTT_HOST` / `MQTT_PORT` | 브로커 주소 | `127.0.0.1` / `1883` |
+| `MQTT_TOPIC_PREFIX` | AasPath 앞에 붙는 토픽 | `aas` |
 
 ## 로그
 
@@ -129,9 +136,40 @@ uvicorn, BaSyx SDK 로그도 같은 형식으로 콘솔과 로그 파일에 함�
 
 PLC 태그처럼 NodeId 자체가 다를 때만 `MAPPINGS_DIR/{package_id}.json` 또는 패키지 `PACKAGE_CONFIG_DIR/mapping.json` 을 씁니다. 유틸리티의 **선택 패키지 AAS 매핑 읽기**는 매핑 파일이 있으면 그 테이블을, 없으면 `engineering.csv` 를 읽습니다.
 
-서버 시작 시 카탈로그 기본 서버에 자동 접속하고, 해당 AAS 산출물 `engineering.csv` 의 Variable NodeId를 한 번에 구독합니다. 뷰어 **실시간 그래프**는 `GET /api/opcua/packages/{package_id}/live` 로 이 캐시만 읽습니다. 웹 뷰어는 현장 OPC-UA 구독을 걸거나 해제하지 않습니다.
+`MQTT_ENABLED=false`(기본)이면 서버 시작 시 카탈로그 기본 서버에 자동 접속하고, 해당 AAS 산출물 `engineering.csv` 의 화면용 Variable NodeId를 구독합니다. `MQTT_ENABLED=true` 이면 이 상시 구독은 하지 않고, 아래 MQTT 경로로 받은 값을 캐시에 넣습니다. 뷰어 **실시간 그래프**는 `GET /api/opcua/packages/{package_id}/live` 와 `/live/stream` 으로 이 캐시만 읽습니다. 웹 뷰어는 현장 OPC-UA 구독을 걸거나 해제하지 않습니다.
 
-클라이언트 모듈은 `app/opc_ua/client/` 에 있고, HTTP 요청 사이 연결은 `OpcUaSession` 이 유지합니다.
+클라이언트 모듈은 `app/opc_ua/client/` 에 있고, 유틸리티가 접속한 동안의 연결은 `OpcUaSession` 이 유지합니다. MQTT 경로에서 유틸리티의 **접속**은 browse·read·write 용 세션만 열고, Variable 전체 구독은 걸지 않습니다. 일부 노드 구독은 유틸리티에서 구독을 누른 동안만 동작합니다.
+
+### MQTT 실시간 값
+
+현장 값의 상시 OPC-UA 구독은 AAS 서버 밖 발행 프로세스가 하나 맡습니다. 발행 프로세스는 카탈로그의 엣지 서버를 구독하고, 값이 바뀔 때만 `engineering.csv` 의 AasPath 로 MQTT에 올립니다. 브로커는 토픽마다 마지막 값을 보관합니다. AAS 서버와 외부 프로그램은 브로커만 구독합니다. 발행 프로세스는 AAS 서버 주소를 모르고, AAS 서버도 발행 프로세스 주소를 모릅니다.
+
+```bash
+# 브로커 정의는 camtic-db-postgres-ts/mqtt-compose 에 있다.
+# 1883 에 mosquitto 가 이미 떠 있으면 다시 실행하지 않는다.
+docker compose -f ../camtic-db-postgres-ts/mqtt-compose/docker-compose.yml up -d
+
+# 설치된 타깃이 발행 서비스를 같이 켠다. 포그라운드로 볼 때만 아래를 쓴다.
+python -m publisher
+```
+
+토픽 예: `aas/Hyundai_HH7_AAS_Template_v0.3/HH7/RobotKinematicState/JointPosition/J1`
+
+```json
+{
+  "packageId": "Hyundai_HH7_AAS_Template_v0.3",
+  "path": "RobotKinematicState/JointPosition/J1",
+  "nodeId": "ns=1;s=Hyundai_HH7_AAS_Template_v0.3/HH7/RobotKinematicState/JointPosition/J1",
+  "value": -82.4,
+  "status": "Good",
+  "sourceTimestamp": "2026-11-10T04:00:00Z",
+  "statusCode": 0
+}
+```
+
+`statusCode` 는 TimescaleDB 품질 기록용입니다. 카탈로그 `nodeIdNamespace` 가 `ns=1` 과 다르면 구독·메시지의 NodeId 만 그 번호로 바꿉니다.
+
+발행이 토픽에 도착하는 것을 확인한 뒤 `.env` 에서 `MQTT_ENABLED=true` 로 화면 서비스만 재시작합니다. 그 전에도 화면은 기존 OPC-UA 구독으로 동작합니다. `MQTT_ENABLED=true` 이면 `OPCUA_AUTO_CONNECT` 와 관계없이 시작 시 상시 구독을 하지 않고, live 캐시와 `MFG_RECORD_OPCUA` 기록은 MQTT 수신으로 갱신됩니다. 패키지를 추가하면 `sudo systemctl restart camtic-aas-publisher` 로 발행만 재시작합니다. 현장 쓰기는 MQTT로 만들지 않고, 유틸리티의 요청 시 OPC-UA 연결만 사용합니다.
 
 ### 실시간 그래프
 
@@ -143,7 +181,7 @@ PLC 태그처럼 NodeId 자체가 다를 때만 `MAPPINGS_DIR/{package_id}.json`
 - Joint / Cartesian 차트는 해당 AAS 경로가 매핑된 경우에만 나타남
 - 시간 범위: 60초 / 10분 / 30분 / 1시간
 
-유틸리티 → OPC-UA에서 카탈로그 서버를 고르고 접속한 뒤 사용합니다. 차트는 Chart.js CDN을 쓰므로 브라우저에 인터넷이 필요합니다.
+`MQTT_ENABLED=false` 이면 유틸리티 → OPC-UA에서 카탈로그 서버에 접속한 뒤 사용합니다. `MQTT_ENABLED=true` 이면 브로커 값으로 그래프가 갱신되고, 유틸리티 접속은 browse·read·write 에만 씁니다. 차트는 Chart.js CDN을 쓰므로 브라우저에 인터넷이 필요합니다.
 
 ### TimescaleDB 모니터링
 
@@ -153,7 +191,11 @@ AAS Viewer 탭에서 설비·노드·최신값·이력(CSV)·SSE·알람·DB 상
 `.env`에 실제 운영 계정과 접속정보를 설정하세요. 기존 `.env` 값이 코드 기본값보다 우선합니다.
 실제 수집 승인 전에는 `MFG_RECORD_OPCUA=false`, `MFG_ALARMS_ENABLED=false`,
 `OPCUA_AUTO_CONNECT=false`로 두고 OPC-UA 연결 API를 호출하지 마세요.
-현장 기록을 켜면 `MFG_EQUIPMENT_ID=ROBOT_FIELD_01`의 활성 노드만 구독·저장합니다.
+`MFG_SYNC_PACKAGES=true`(기본, 60초)이면 DB 연결 중 `packages/` 의 AASX 템플릿 `engineering.csv` 를 읽어
+`equipment`, `equipment_node`, `aas_node_mapping` 에 메타를 올립니다. 대상은 카탈로그 `aasIds` 의 셸이고,
+DataAcquisition 매핑의 `StorageTarget` 이 `TSDB`(시계열) 또는 `EventDB`(상태)인 속성과
+PLC `IOInterfaceMapping` 이 가리키는 신호입니다. 미들웨어가 같은 NodeId 로 값을 올리면 `opcua_sample` 에 기록됩니다.
+같은 NodeId 가 설비 둘에 있으면 `MFG_EQUIPMENT_ID` 쪽을 우선합니다.
 읽기 전용 점검: `python -m scripts.mfg_inspect` (앱 시작이나 OPC-UA 연결 없음).
 
 ## API
@@ -258,7 +300,10 @@ app/
   static/          플랫폼 홈 + HTML 트리 뷰어 (tsdb-monitor.js: TimescaleDB 모니터링 탭)
 sql/               읽기 전용 점검·조회 SQL
 deploy/
-  camtic-aas-backend-viewer.service.in  systemd 유닛 템플릿
+  camtic-aas.target.in                  화면·발행을 같이 켜는 systemd 타깃
+  camtic-aas-backend-viewer.service.in  화면 서비스 템플릿
+  camtic-aas-publisher.service.in       발행 서비스 템플릿
+publisher/           엣지 OPC-UA 구독과 MQTT 발행 (python -m publisher)
 scripts/
   create_sample_aasx.py  샘플 AASX 생성 (python -m scripts.create_sample_aasx)
   mfg_inspect.py         기존 DB 읽기 전용 카탈로그 점검

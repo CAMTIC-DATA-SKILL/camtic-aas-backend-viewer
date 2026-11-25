@@ -188,7 +188,8 @@ def test_existing_and_new_routes_registered_and_disabled_state_is_503():
 
     paths = set(app.openapi()["paths"])
     assert {"/api/health", "/api/packages", "/api/packages/{package_id}/tree", "/api/opcua/status",
-            "/api/opcua/connect", "/api/opcua/subscribe", "/api/opcua/packages/{package_id}/live"} <= paths
+            "/api/opcua/connect", "/api/opcua/subscribe", "/api/opcua/packages/{package_id}/live",
+            "/api/camera/d455/stream.mjpg"} <= paths
     assert {p.removeprefix("/api/v1/timeseries") for p in paths if p.startswith("/api/v1/")} == {
         "/alarms", "/db-status", "/equipment", "/history", "/history.csv", "/ingest", "/latest", "/mapping",
         "/mappings", "/node-status", "/nodes", "/recent", "/stream", "/summary"}
@@ -361,7 +362,7 @@ def _recorder(session):
     return OpcUaRecorder(runtime, lambda: ENDPOINT)
 
 
-def test_recorder_selects_only_enabled_real_nodes_of_the_field_equipment_and_endpoint():
+def test_recorder_selects_enabled_real_nodes_on_the_connected_endpoint():
     index_rows = [SimpleNamespace(node_id=n.node_id, equipment_id=FIELD) for n in NODES if n.enabled]
 
     class IndexSession(FakeSession):
@@ -375,9 +376,9 @@ def test_recorder_selects_only_enabled_real_nodes_of_the_field_equipment_and_end
     asyncio.run(recorder._refresh_index())
     sql = session.statements[0][0]
     for required in ("manufacturing.equipment.data_source = 'REAL'", "manufacturing.equipment.enabled",
-                     "manufacturing.equipment_node.enabled", f"manufacturing.equipment.opcua_endpoint = '{ENDPOINT}'",
-                     f"manufacturing.equipment.equipment_id = '{FIELD}'"):
+                     "manufacturing.equipment_node.enabled", f"manufacturing.equipment.opcua_endpoint = '{ENDPOINT}'"):
         assert required in sql, required
+    assert f"manufacturing.equipment.equipment_id = '{FIELD}'" not in sql
 
     def change(node_id, value, status_code=0, naive=True):
         ts = datetime(2026, 11, 2, 12, 0, 0) if naive else NOW
@@ -391,6 +392,24 @@ def test_recorder_selects_only_enabled_real_nodes_of_the_field_equipment_and_end
     sample = recorder._buffer[0]
     assert sample.source_ts == NOW and sample.source_ts.tzinfo is not None  # asyncua 의 naive UTC → aware UTC
     assert recorder._buffer[1].quality == 0x80000000 and recorder._buffer[1].value is None
+
+
+def test_recorder_prefers_configured_equipment_when_one_node_is_on_two_rows():
+    shared = "ns=2;i=1145"
+    index_rows = [
+        SimpleNamespace(node_id=shared, equipment_id="PLC_AAS_Template_v0.4_1"),
+        SimpleNamespace(node_id=shared, equipment_id=FIELD),
+        SimpleNamespace(node_id="ns=2;i=9", equipment_id="PLC_AAS_Template_v0.4_1"),
+    ]
+
+    class IndexSession(FakeSession):
+        async def execute(self, stmt, params=None):
+            return FakeResult(index_rows)
+
+    recorder = _recorder(IndexSession(NODES))
+    asyncio.run(recorder._refresh_index())
+    assert recorder._index[shared] == FIELD
+    assert recorder._index["ns=2;i=9"] == "PLC_AAS_Template_v0.4_1"
 
 
 def test_recorder_keeps_buffer_when_db_is_down_and_drains_after_recovery():
@@ -445,8 +464,8 @@ def test_preflight_passes_with_expected_production_state_and_flags_each_gap():
     assert wrong_endpoint["checks"]["field_endpoint_matches_catalog"] is False
     missing_col = preflight(result(cols=[c for c in columns if c["column_name"] != "sampling_ms"]), equipment)
     assert missing_col["checks"]["model_columns_all_exist_in_db"] is False
-    nodes = preflight(result(field={"total": 23, "enabled": 17, "mappings": 23, "unmapped": 0}), equipment)
-    assert nodes["checks"]["field_nodes_23_active_18_inactive_5_unmapped_0"] is False
+    nodes = preflight(result(field={"total": 23, "enabled": 17, "mappings": 22, "unmapped": 1}), equipment)
+    assert nodes["checks"]["field_nodes_present_and_mapped"] is False
     assert preflight(result(), None)["checks"]["field_equipment_exists"] is False
 
 

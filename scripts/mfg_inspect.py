@@ -53,8 +53,8 @@ def preflight(result: dict, equipment) -> dict:
         'field_equipment_enabled': bool(equipment and equipment['enabled']),
         # 기록기는 equipment.opcua_endpoint 가 현재 접속 endpoint 와 문자열로 같을 때만 노드를 고른다.
         'field_endpoint_matches_catalog': bool(equipment and server and equipment['opcua_endpoint'] == server.endpoint),
-        'field_nodes_23_active_18_inactive_5_unmapped_0': (
-            (field['total'], field['enabled'], field['total'] - field['enabled'], field['unmapped']) == (23, 18, 5, 0)),
+        # 템플릿 동기화가 노드를 늘리므로 개수는 고정하지 않는다. 등록된 노드는 매핑이 있어야 한다.
+        'field_nodes_present_and_mapped': field['total'] > 0 and field['unmapped'] == 0,
     }
     return {
         'all_pass': all(checks.values()),

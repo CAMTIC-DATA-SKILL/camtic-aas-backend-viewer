@@ -1,14 +1,18 @@
+import asyncio
+import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from asyncua import ua
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config import settings
 from utils.log_setup import LogSetup
 
 from .live_frame import frame_from_mapping
+from .mqtt_feed import MqttFeed
 from .opc_ua import OpcUaClientError, OpcUaSession
 from .opcua_catalog import CatalogServer, load_catalog
 from .opcua_export import load_engineering_nodes
@@ -58,6 +62,11 @@ def get_repository(request: Request) -> AasxRepository:
 
 def get_opcua(request: Request) -> OpcUaSession:
     return request.app.state.opcua
+
+
+def utility_connect_subscribes(mqtt_enabled: bool) -> bool:
+    """유틸리티 접속이 Variable 구독까지 할지. MQTT 경로에서는 세션만 연다."""
+    return not mqtt_enabled
 
 
 def get_package(package_id: str, repository: AasxRepository = Depends(get_repository)) -> AasxPackage:
@@ -163,7 +172,7 @@ def mapping_live_response(
         "values": mapped,
         "frame": frame_from_mapping(
             mapped,
-            connected=session.is_connected,
+            connected=session.live_online,
             package_id=package_id,
             aas_id=mapping.aas_id,
         ),
@@ -198,7 +207,7 @@ def engineering_live_response(
         "values": mapped,
         "frame": frame_from_mapping(
             mapped,
-            connected=session.is_connected,
+            connected=session.live_online,
             package_id=package_id,
             aas_id=aas_id,
         ),
@@ -239,51 +248,29 @@ def _engineering_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> lis
     return selected
 
 
-def _shell_name(aas_path: str, package_id: str) -> str:
-    parts = [part for part in (aas_path or "").split("/") if part]
-    if package_id and parts and parts[0] == package_id:
-        parts = parts[1:]
-    return parts[0] if parts else ""
-
-
-def _tag_node_id(address: str) -> str:
-    text = address.strip()
-    if text.startswith("ns="):
-        return text
-    return f"ns=1;s={text}"
-
-
-def _tag_live_nodes(nodes: list[dict[str, Any]], package_id: str) -> list[dict[str, Any]]:
-    """IOInterfaceMapping 의 PLC 주소를 OPC-UA 태그로, AASPath 를 값이 붙을 속성으로 쓴다.
-
-    캐시 키는 태그 주소 하나다. 같은 D2010 을 여러 파일이 가리켜도 구독과 저장은 한 번이다.
-    """
-    grouped: dict[str, dict[str, dict[str, Any]]] = {}
+def _mapped_engineering_nodes(nodes: list[dict[str, Any]], package_id: str) -> list[dict[str, Any]]:
+    """IOInterfaceMapping 의 AASPath 가 가리키는 속성을 그 속성의 engineering NodeId 로 구독한다."""
+    targets: set[str] = set()
     for node in nodes:
         submodel, path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
-        if submodel != "IOInterfaceMapping" or "." not in path:
+        if submodel != "IOInterfaceMapping" or path.rsplit(".", 1)[-1] != "AASPath":
             continue
-        group, leaf = path.rsplit(".", 1)
-        if leaf not in {"PLCAddress", "AASPath"}:
-            continue
-        grouped.setdefault(group, {})[leaf] = node
+        target = str(node.get("templateValue") or "").strip().strip("/")
+        if target:
+            targets.add(target)
+    if not targets:
+        return []
 
     selected: list[dict[str, Any]] = []
-    for fields in grouped.values():
-        address = str((fields.get("PLCAddress") or {}).get("templateValue") or "").strip()
-        target = str((fields.get("AASPath") or {}).get("templateValue") or "").strip().strip("/")
-        sample = fields.get("PLCAddress") or {}
-        shell = _shell_name(str(sample.get("aasPath") or ""), package_id)
-        if not address or not target or not shell:
+    for node in nodes:
+        if not node.get("nodeId"):
             continue
-        selected.append(
-            {
-                "nodeId": _tag_node_id(address),
-                "browseName": target.rsplit("/", 1)[-1],
-                "displayName": address,
-                "aasPath": f"/{package_id}/{shell}/{target}",
-            }
-        )
+        submodel, path = split_engineering_path(str(node.get("aasPath") or ""), package_id)
+        if not submodel or not path or submodel == "IOInterfaceMapping":
+            continue
+        full = f"{submodel}/{path.replace('.', '/')}"
+        if full in targets:
+            selected.append(node)
     return selected
 
 
@@ -296,7 +283,7 @@ def _package_live_source(
     records = load_engineering_nodes(repository.artifact_dir(package.id), variables_only=True)
     nodes = [
         *_engineering_live_nodes(records, package.id),
-        *_tag_live_nodes(records, package.id),
+        *_mapped_engineering_nodes(records, package.id),
     ]
     node_ids = list(
         dict.fromkeys(
@@ -320,14 +307,56 @@ def _http_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/status")
-def opcua_status(session: OpcUaSession = Depends(get_opcua)) -> dict[str, Any]:
-    return session.status()
+def opcua_status(request: Request, session: OpcUaSession = Depends(get_opcua)) -> dict[str, Any]:
+    payload = session.status()
+    feed = getattr(request.app.state, "mqtt_feed", None)
+    if feed is not None:
+        payload.update(feed.status())
+    return payload
 
 
 @router.get("/catalog")
 def opcua_catalog() -> dict[str, Any]:
     try:
         return load_catalog().to_dict()
+    except Exception as exc:
+        raise _http_error(exc) from exc
+
+
+def _transport_down(session: OpcUaSession) -> bool:
+    return not session.is_transport_connected
+
+
+async def reconnect_catalog(session: OpcUaSession, repository: AasxRepository) -> dict[str, Any]:
+    """현장 값 요청용. 소켓이 살아 있고 구독이 있으면 그대로 두고, 아니면 카탈로그로 다시 붙인다."""
+    async with session._reconnect_lock:
+        if not _transport_down(session) and session.subscribed_node_ids:
+            return session.status()
+        if _transport_down(session):
+            logger.info("OPC-UA 연결이 없어 카탈로그로 재접속합니다.")
+            if session.is_connected:
+                await session.disconnect()
+        else:
+            logger.info("OPC-UA 세션은 살아 있고 구독이 없어 카탈로그 구독을 다시 겁니다.")
+        return await connect_from_catalog(
+            session,
+            repository,
+            use_default_server=True,
+        )
+
+
+@router.post("/reconnect")
+async def opcua_reconnect(
+    session: OpcUaSession = Depends(get_opcua),
+    repository: AasxRepository = Depends(get_repository),
+) -> dict[str, Any]:
+    # 화면의 기본 실시간 경로는 MQTT다. 이 호출로 엣지 상시 구독을 다시 열지 않는다.
+    if settings.mqtt.enabled:
+        return session.status()
+    try:
+        return await reconnect_catalog(session, repository)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise _http_error(exc) from exc
 
@@ -352,6 +381,7 @@ async def opcua_connect(
             security_policy=payload.securityPolicy,
             security_mode=payload.securityMode,
             require_server=bool(payload.serverId),
+            subscribe=utility_connect_subscribes(settings.mqtt.enabled),
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -373,6 +403,7 @@ async def connect_from_catalog(
     security_mode: Optional[str] = None,
     require_server: bool = False,
     use_default_server: bool = False,
+    subscribe: bool = True,
 ) -> dict[str, Any]:
     server: CatalogServer | None = None
     if server_id or use_default_server:
@@ -394,27 +425,36 @@ async def connect_from_catalog(
     resolved_ids = [item.strip() for item in (server.aas_ids if server else ()) if item.strip()]
     if aas_id and aas_id.strip():
         resolved_ids = [aas_id.strip()]
-    subscribe_error = await subscribe_engineering(
-        session,
-        repository,
-        aas_ids=resolved_ids,
-        package_id=(package_id or "").strip(),
-    )
+    subscribe_error = None
+    if subscribe:
+        subscribe_error = await subscribe_engineering(
+            session,
+            repository,
+            aas_ids=resolved_ids,
+            package_id=(package_id or "").strip(),
+        )
     status = session.status()
     try:
         status["namespaces"] = await session.namespaces()
     except Exception:
         status["namespaces"] = []
-    logger.info(
-        "OPC-UA 토픽 등록: endpoint=%s server=%s aasId=%s count=%d",
-        status.get("endpoint"),
-        status.get("catalogServerId") or "-",
-        ",".join(resolved_ids) or "-",
-        len(status.get("subscribedNodeIds") or []),
-    )
-    if subscribe_error:
-        status["subscribeError"] = subscribe_error
-        logger.warning("OPC-UA 매핑 구독 실패: %s", subscribe_error)
+    if subscribe:
+        logger.info(
+            "OPC-UA 토픽 등록: endpoint=%s server=%s aasId=%s count=%d",
+            status.get("endpoint"),
+            status.get("catalogServerId") or "-",
+            ",".join(resolved_ids) or "-",
+            len(status.get("subscribedNodeIds") or []),
+        )
+        if subscribe_error:
+            status["subscribeError"] = subscribe_error
+            logger.warning("OPC-UA 매핑 구독 실패: %s", subscribe_error)
+    else:
+        logger.info(
+            "OPC-UA 요청 시 연결: endpoint=%s server=%s",
+            status.get("endpoint"),
+            status.get("catalogServerId") or "-",
+        )
     return status
 
 
@@ -615,16 +655,22 @@ def opcua_package_mapping(
     return _require_mapping(package, repository).to_dict()
 
 
-@router.get("/packages/{package_id}/live")
-def opcua_package_live(
-    package: AasxPackage = Depends(get_package),
-    repository: AasxRepository = Depends(get_repository),
-    session: OpcUaSession = Depends(get_opcua),
-) -> dict[str, Any]:
-    """구독 캐시만 읽는다. 웹 뷰어는 이 API로 현장 구독을 걸거나 바꾸지 않는다.
+async def restore_mqtt_live_cache(request: Request) -> int:
+    """발행된 노드가 캐시에 없으면 브로커의 마지막 값으로 채운다."""
+    if not settings.mqtt.enabled:
+        return 0
+    feed = getattr(request.app.state, "mqtt_feed", None)
+    if not isinstance(feed, MqttFeed):
+        return 0
+    return await feed.fill_missing_from_broker()
 
-    요청 패키지가 ``subscribePackageId`` 와 다를 때는 캐시를 붙이지 않는다.
-    """
+
+def _package_live_payload(
+    package: AasxPackage,
+    repository: AasxRepository,
+    session: OpcUaSession,
+) -> dict[str, Any]:
+    """구독 캐시만 읽는다. 요청 패키지가 구독 중이 아니면 값을 붙이지 않는다."""
     field_namespace = _field_namespace(session)
     _source, nodes, _node_ids, aas_id = _package_live_source(
         package, repository, field_namespace=field_namespace
@@ -635,6 +681,64 @@ def opcua_package_live(
         package.id,
         aas_id=aas_id,
         field_namespace=field_namespace,
+    )
+
+
+@router.get("/packages/{package_id}/live")
+async def opcua_package_live(
+    request: Request,
+    package: AasxPackage = Depends(get_package),
+    repository: AasxRepository = Depends(get_repository),
+    session: OpcUaSession = Depends(get_opcua),
+) -> dict[str, Any]:
+    """구독 캐시의 현재 스냅샷. 비어 있는 발행 노드는 브로커에서 채운다."""
+    await restore_mqtt_live_cache(request)
+    return _package_live_payload(package, repository, session)
+
+
+@router.get("/packages/{package_id}/live/stream")
+async def opcua_package_live_stream(
+    request: Request,
+    package: AasxPackage = Depends(get_package),
+    repository: AasxRepository = Depends(get_repository),
+    session: OpcUaSession = Depends(get_opcua),
+) -> StreamingResponse:
+    """구독 알림이 캐시에 들어올 때마다 같은 스냅샷을 보낸다. 처음 연결하면 현재 값을 바로 보낸다."""
+
+    async def events() -> AsyncIterator[str]:
+        queue = session.watch_live()
+        pending = True
+        try:
+            while not await request.is_disconnected():
+                if not pending:
+                    try:
+                        await asyncio.wait_for(queue.get(), timeout=15)
+                    except asyncio.TimeoutError:
+                        if await restore_mqtt_live_cache(request):
+                            pending = True
+                            continue
+                        yield ": keepalive\n\n"
+                        continue
+                while not queue.empty():
+                    queue.get_nowait()
+                pending = False
+                try:
+                    await restore_mqtt_live_cache(request)
+                    payload = _package_live_payload(package, repository, session)
+                    body = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+                except Exception:
+                    logger.exception("LIVE 스트림 스냅샷 실패: package=%s", package.id)
+                    yield ": snapshot-error\n\n"
+                    await asyncio.sleep(1)
+                    continue
+                yield f"data: {body}\n\n"
+        finally:
+            session.unwatch_live(queue)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
