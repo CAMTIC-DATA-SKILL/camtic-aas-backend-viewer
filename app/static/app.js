@@ -109,7 +109,7 @@ function renderPackageList() {
   const items = state.packages.map((p) => {
     const meta = p.error
       ? `로드 실패: ${p.error}`
-      : `AAS ${p.counts.shells} · SM ${p.counts.submodels} · CD ${p.counts.conceptDescriptions}`;
+      : `AAS ${p.counts.shells} · SM ${p.counts.submodels} · Prop ${p.counts.properties ?? 0} · CD ${p.counts.conceptDescriptions}`;
     return el(
       "li",
       {

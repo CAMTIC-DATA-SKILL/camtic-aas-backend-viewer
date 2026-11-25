@@ -455,7 +455,7 @@ def load_settings() -> Settings:
         client_cert=_optional_path("OPCUA_CLIENT_CERT"),
         client_key=_optional_path("OPCUA_CLIENT_KEY"),
         server_cert=_optional_path("OPCUA_SERVER_CERT"),
-        subscription_period_ms=_int("OPCUA_SUBSCRIPTION_PERIOD_MS", 500),
+        subscription_period_ms=_int("OPCUA_SUBSCRIPTION_PERIOD_MS", 100),
         sampling_interval_ms=_int("OPCUA_SAMPLING_INTERVAL_MS", 100),
         node_ids=_list("OPCUA_NODE_IDS", ""),
     )
